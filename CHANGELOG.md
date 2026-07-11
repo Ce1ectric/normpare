@@ -4,10 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2026-07-09
+## [0.1.1] - 2026-07-09
 
-First public release. `normpare` compares two editions of a technical standard and produces
+First usable release. `normpare` compares two editions of a technical standard and produces
 the change set deterministically, with an optional AI-interpreted synopsis on top.
+
+!!! note
+    0.1.0 was withdrawn immediately after upload and must not be used.
 
 ### Added
 
@@ -43,4 +46,4 @@ the change set deterministically, with an optional AI-interpreted synopsis on to
   fixed so repeated runs produce byte-identical mapping, keywords and statistics, and a
   content-identical synopsis.
 
-[0.1.0]: https://github.com/Ce1ectric/normpare/releases/tag/v0.1.0
+[0.1.1]: https://github.com/Ce1ectric/normpare/releases/tag/v0.1.1
