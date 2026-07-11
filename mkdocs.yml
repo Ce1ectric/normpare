@@ -1,0 +1,31 @@
+site_name: normpare
+site_description: Compare two editions of a technical standard
+site_url: https://ce1ectric.github.io/normpare/
+repo_url: https://github.com/Ce1ectric/normpare
+docs_dir: docs
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Concept: concept.md
+  - Usage: usage.md
+  - LLM providers: providers.md
+  - API Reference: reference.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences

@@ -1,0 +1,12 @@
+# Einheitliche Zeilenenden (verhindert CRLF/LF-Rauschen zwischen Win/macOS/Linux)
+* text=auto eol=lf
+
+# Binärformate nicht als Text behandeln
+*.docx binary
+*.doc  binary
+*.pdf  binary
+*.xlsx binary
+*.pptx binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary

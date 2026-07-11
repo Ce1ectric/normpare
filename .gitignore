@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+env/
+
+# Läufe / lokale Ausgaben
+out/
+llm_cache/
+
+# Schlüssel / Umgebung (niemals committen)
+.api_key
+*.api_key
+.env
+
+# Betriebssystem / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Coding Assist
+CLAUDE.md
+ROADMAP.md
+STATUS.md
+ARCHITEKTUR.md
