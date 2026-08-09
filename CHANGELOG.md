@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `evidence_ok` is being reframed. A literature review (2026-08) established that the
+  current check measures **quote fidelity** — whether the cited wording actually occurs in
+  the source paragraph — and not whether the cited span *supports* the interpretation, nor
+  whether the interpretation stays within what the span licenses. Three separate metrics
+  will replace the single figure: citation completeness, grounding coverage and attribution
+  precision. The reported "99.88 % evidence" refers to quote fidelity and will be labelled
+  as such.
+
+### Planned
+
+Agreed but not yet implemented. Rationale, sources and sequencing are recorded in the
+internal decision log (`notizen/Entscheidungen_Literaturreview.md`, decisions ENT-01…17)
+and the change strategy (`notizen/Aenderungsstrategie.md`).
+
+- Four-axis change taxonomy replacing the single change label: structural operation,
+  semantic status, normative direction, affected normative component.
+- An explicit `undetermined` interpretation status with reason codes, alongside the
+  existing review queue.
+- Correspondence graph supporting 1:n, n:1 and n:m relations, with per-signal scores and
+  alternative candidates retained on every edge.
+- Score margin (best over second-best candidate) as the confidence measure, replacing raw
+  similarity.
+- Support and no-overflow verification of interpretations against cited spans, using a
+  verifier independent from the interpreting model.
+- Quote-first span resolution with recorded matching method and edit distance.
+- Extended German cue inventory covering modal infinitives, lexical obligation phrases and
+  indicative constructions, which the current modality detection does not capture.
+- Work / edition / manifestation identity model for units across editions.
+- Evaluation protocol measuring alignment and classification separately, with per-axis
+  inter-annotator agreement on a gold subset.
+
 ## [0.1.1] - 2026-07-09
 
 First usable release. `normpare` compares two editions of a technical standard and produces

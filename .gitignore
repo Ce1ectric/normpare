@@ -36,3 +36,15 @@ CLAUDE.md
 ROADMAP.md
 STATUS.md
 ARCHITEKTUR.md
+
+# Interne deutsche Notizen (nicht Teil der veröffentlichten docs/)
+notizen/
+
+# Unbeaufsichtigte Läufe: Konfiguration mit absoluten Pfaden, Prompts, Protokolle
+.claude/
+prompts/
+runs/
+nachtlauf.sh
+
+# Urheberrechtlich geschützte Korpus-Fixtures
+tests/fixtures/korpus/
