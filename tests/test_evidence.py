@@ -12,6 +12,9 @@ none touches the network. The guard reports four quantities per interpretation:
     number of characters actually covered by the source text.
 ``evidence_fragments``
     number of fragments after splitting at ellipsis marks.
+``evidence_unique``
+    strict in the addressed change record and in no other record of the chapter
+    (ENT-30) -- a marker, not a gate.
 """
 from __future__ import annotations
 
@@ -198,3 +201,81 @@ def test_asset_evidence_reports_the_same_four_quantities():
     assert split["evidence_strict"] is True
     short = check_asset_evidence({"evidence": "kurz"}, ASSET_HAY)
     assert short["evidence_ok"] is False
+
+
+# -- evidence_unique (ENT-30) --------------------------------------------------------------
+
+OTHER = "die pruefung erfolgt nach den vorgaben des netzbetreibers"
+
+
+def _two_records(first_new: str, second_new: str) -> dict:
+    return {"changes": [{"old_text": "", "new_text": first_new},
+                        {"old_text": "", "new_text": second_new}]}
+
+
+def _check_in(chapter: dict, evidence: str, index: int = 0) -> dict:
+    return check_evidence({"change_index": index, "evidence": evidence}, chapter)
+
+
+def test_evidence_unique_true_for_a_single_match():
+    """The quote is verbatim in the addressed record and nowhere else in the chapter."""
+    res = _check_in(_two_records(SOURCE, OTHER), "die anforderungen an die messeinrichtung")
+    assert res["evidence_strict"] is True
+    assert res["evidence_unique"] is True
+
+
+def test_evidence_unique_false_when_another_record_matches():
+    """The same quote also fits a foreign record -- the interpretation is not localizable.
+
+    This is the upper bound for undetectable ``change_index`` errors (ENT-30): the
+    interpretation may address the wrong record without anyone noticing.
+    """
+    res = _check_in(_two_records(SOURCE, SOURCE + " und weiteres"),
+                    "die anforderungen an die messeinrichtung")
+    assert res["evidence_strict"] is True
+    assert res["evidence_unique"] is False
+
+
+def test_evidence_unique_requires_strict():
+    """Without a complete match in the addressed record there is nothing unique to report."""
+    res = _check_in(_two_records(SOURCE, OTHER),
+                    "die anforderungen an die schutzeinrichtung sind zu pruefen")
+    assert res["evidence_ok"] is True
+    assert res["evidence_strict"] is False
+    assert res["evidence_unique"] is False
+
+
+# -- the four evidence cases of the synthetic corpus ----------------------------------------
+
+def _addressed_record(chapter: dict, quote: str) -> tuple[int, dict]:
+    """Index of the record the quote covers best, plus the result of the guard there.
+
+    ``erwartung.toml`` names the chapter, not the change record; the record with the
+    most covered characters is the one the quote is about (ties: the first).
+    """
+    results = [check_evidence({"change_index": i, "evidence": quote}, chapter)
+               for i in range(len(chapter["changes"]))]
+    best = max(range(len(results)), key=lambda i: results[i]["evidence_match_chars"])
+    return best, results[best]
+
+
+def test_synthetic_evidence_cases(expectation, synthetic_run):
+    """The four evidence cases of ``erwartung.toml`` over the real change records."""
+    by_new = {ch.get("new_id"): ch for ch in synthetic_run.synopse["chapters"]}
+    failures = []
+    for case in expectation["evidenz"]:
+        chapter = by_new.get(case["kapitel"])
+        assert chapter is not None, f"chapter {case['kapitel']} is missing from the synopsis"
+        index, res = _addressed_record(chapter, case["zitat"])
+        got = {k: res[k] for k in ("evidence_ok", "evidence_strict", "evidence_fragments",
+                                   "evidence_unique")}
+        want = {"evidence_ok": case["erwartet_ok"]}
+        for key, field in (("erwartet_strict", "evidence_strict"),
+                           ("erwartet_fragmente", "evidence_fragments"),
+                           ("erwartet_unique", "evidence_unique")):
+            if key in case:
+                want[field] = case[key]
+        if any(got[k] != v for k, v in want.items()):
+            failures.append(f"{case['fall']} (chapter {case['kapitel']}, record {index}): "
+                            f"expected {want}, got {got}")
+    assert not failures, "\n".join(failures)
