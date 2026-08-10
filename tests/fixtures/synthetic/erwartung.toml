@@ -263,5 +263,28 @@ kapitel = "4.1"
 zitat = "zu kalibrieren"
 erwartet_ok = false
 erwartet_unique = false
-zweck = """Kommt in 4.1 mehrfach und in 4.2 erneut vor. Beleg für ENT-30: vollständig
-belegt, aber nicht lokalisierbar."""
+zweck = """Kommt in beiden Absätzen von 4.1 vor. Beleg für ENT-30: vollständig belegt,
+aber nicht lokalisierbar."""
+hinweis = """Nachgebessert nach AP-03: die Ausnahme steht seither als eigener Absatz in
+4.1, damit das Kapitel zwei Änderungsdatensätze hat. Vorher lagen beide Sätze in einem
+Absatz, das Kapitel hatte einen einzigen Datensatz, und der Fall prüfte nicht, was er
+prüfen sollte — die Eindeutigkeit ist nach ENT-30 kapitelweit definiert."""
+
+# --------------------------------------------------------------------------
+# Absatzebene
+# --------------------------------------------------------------------------
+# Nachgetragen nach AP-03. Die Zuordnungen oben sind auf Kapitelebene formuliert und
+# haben den folgenden Fehler deshalb nicht erfasst.
+
+[[absatz]]
+fall = "verschmelzung_2_zu_1"
+alt = ["6.1", "6.2"]
+neu = "6"
+satz = "Die Dokumentation ist zehn Jahre aufzubewahren."
+erwartet = "unveraendert"
+zweck = """Der Satz steht wörtlich in beiden Ausgaben. In der Neufassung ist er der
+zweite Satz eines Absatzes, dessen erster Satz bereits mit alt 6.1 gepaart wurde."""
+hinweis = """AP-03 hat hier ein falsch positives 'entfallen' gemessen. Ein Satz, der in
+der neuen Ausgabe wörtlich vorhanden ist, wird als gestrichen gemeldet. Für eine
+Schulungsunterlage ist das die schädlichste Fehlerklasse überhaupt — sie behauptet den
+Wegfall einer Pflicht, die weiterbesteht. Dieselbe Klasse wie ADR-0002."""

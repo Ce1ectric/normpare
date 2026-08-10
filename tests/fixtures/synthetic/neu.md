@@ -25,8 +25,10 @@ Die Prüfeinrichtung muss gegen unbeabsichtigtes Betätigen gesichert sein.
 
 ### 4.1 Grundsatz
 
-Die Prüfeinrichtung ist halbjährlich zu kalibrieren. Satz 1 gilt nicht für
-Prüfeinrichtungen nach Tabelle 2; diese sind jährlich zu kalibrieren.
+Die Prüfeinrichtung ist halbjährlich zu kalibrieren.
+
+Satz 1 gilt nicht für Prüfeinrichtungen nach Tabelle 2; diese sind jährlich zu
+kalibrieren.
 
 ### 4.2 Kalibrierintervall bei erhöhter Beanspruchung
 
