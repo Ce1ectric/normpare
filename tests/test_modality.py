@@ -1,4 +1,5 @@
 """Tests for normpare.stages.enrich.modality (deontic modality + shift)."""
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -168,3 +169,39 @@ def test_all_expectation_cases_from_the_corpus(case):
     """Every ``[[modalitaet]]`` entry of the corpus specification, in its own vocabulary."""
     assert modality.deontic(case["text"])["deontic_class"] == case["erwartet"], \
         f"{case['fundstelle']}: {case['konstruktion']}"
+
+
+# -- audit and classifier must keep saying the same thing -----------------------------------
+
+_AUDIT_SPEC = importlib.util.spec_from_file_location(
+    "modality_audit", Path(__file__).resolve().parents[1] / "tools" / "modality_audit.py")
+
+
+def test_audit_and_classifier_agree():
+    """``tools/modality_audit.py`` holds its own copy of the pattern -- on purpose.
+
+    The audit has to be able to say "this sentence carries the construction *and* the
+    classifier calls it informativ", which it could not if it imported the classifier's
+    pattern. The price is two copies, and this test is what keeps them one measurement:
+    whatever the audit counts as a governed synthetic infinitive, the classifier must
+    read as a duty, and nothing else.
+    """
+    audit = importlib.util.module_from_spec(_AUDIT_SPEC)
+    _AUDIT_SPEC.loader.exec_module(audit)
+
+    sentences = [
+        "Die Einhaltung der Grenzwerte ist nachzuweisen.",
+        "Der Betreiber hat die Prüfung sicherzustellen.",
+        "Die Werte, die vom Betreiber nachzuweisen sind, stehen in Tabelle 2.",
+        "Die Anlage ist nach der VDE-AR-N 4105 bzw. der VDE-AR-N 4110 auszuführen.",
+        "Um die Grenzwerte einzuhalten, werden Filter eingesetzt.",
+        "Die anzuschließenden Kundenanlagen sind in Tabelle 1 aufgeführt.",
+        "Die Kurzunterbrechungen und die Bezugsspannungen sind in Tabelle 3 angegeben.",
+        "Die Anforderung ist zu erfüllen.",
+        "Die Spannung beträgt 20 kV.",
+    ]
+    for sentence in sentences:
+        counted = bool(audit.P_SYNTH_SEIN.search(sentence)
+                       or audit.P_SYNTH_HABEN.search(sentence))
+        classified = bool(modality._P_INFINITIV_SYNTH.search(sentence))
+        assert counted == classified, sentence
