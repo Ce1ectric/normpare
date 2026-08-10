@@ -39,8 +39,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from normpare.stages.deutung import change_haystack, check_evidence
 from normpare.text.textnorm import n2
 
-#: Keys of the four recomputed quantities, in report order.
-METRICS = ("evidence_ok", "evidence_strict", "evidence_match_chars", "evidence_fragments")
+#: Keys of the five recomputed quantities, in report order.
+METRICS = ("evidence_ok", "evidence_strict", "evidence_match_chars", "evidence_fragments",
+           "evidence_unique")
 
 
 def _has_ellipsis(ev: str) -> bool:
@@ -109,6 +110,12 @@ def summarize(rows: list[dict]) -> dict:
         "evidence_ok": len(ok), "evidence_ok_pct": round(100 * len(ok) / n, 2),
         "evidence_strict": len(strict),
         "evidence_strict_pct": round(100 * len(strict) / n, 2),
+        # ENT-30: of the strict hits, how many are not localizable -- the upper bound
+        # for undetectable change_index errors
+        "evidence_unique": sum(1 for r in strict if r["evidence_unique"]),
+        "strict_not_unique": sum(1 for r in strict if not r["evidence_unique"]),
+        "strict_not_unique_pct": round(
+            100 * sum(1 for r in strict if not r["evidence_unique"]) / (len(strict) or 1), 2),
         "evidence_contiguous": sum(1 for r in checked if r["evidence_contiguous"]),
         "evidence_contiguous_pct": round(
             100 * sum(1 for r in checked if r["evidence_contiguous"]) / n, 2),
@@ -167,6 +174,9 @@ def render(rows: list[dict], summary: dict, out_dir: Path, digests: dict) -> str
         (f"  without splitting at ellipsis marks: {s['evidence_contiguous']} / "
          f"{s['checked']} = {s['evidence_contiguous_pct']} %  "
          "(the AP-00 reading, branch 'full')"),
+        (f"evidence_unique  {s['evidence_unique']:>6} / {s['evidence_strict']} strict hits"
+         f"   ({s['strict_not_unique']} = {s['strict_not_unique_pct']} % also fit a "
+         "foreign record of the same chapter -- ENT-30, a marker, not a gate)"),
         "",
         "evidence_match_chars over all checked interpretations:",
         _dist_line("characters covered", s["match_chars_all"]),

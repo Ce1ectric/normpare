@@ -13,6 +13,7 @@ import os
 import re
 import time
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from ..text.textnorm import n2, split_sentences
 
@@ -154,6 +155,16 @@ def resolve_key(root: Path, provider: str = "anthropic", key_env: str | None = N
     return None
 
 
+def cache_key(model: str, system: str, user: str) -> str:
+    """The answer-cache key: SHA1 over model, system prompt and user prompt.
+
+    Deliberately independent of the provider, so an already-cached answer stays valid
+    when the backend changes. :class:`FixtureProvider` uses the same recipe -- a frozen
+    answer is therefore bound to the exact prompt it was produced for.
+    """
+    return hashlib.sha1((model + "\x00" + system + "\x00" + user).encode()).hexdigest()
+
+
 class LlmClient:
     def __init__(self, root: Path, model: str, cache_dir: Path, export_dir: Path,
                  provider: str = "anthropic", base_url: str | None = None,
@@ -191,10 +202,9 @@ class LlmClient:
 
     def _cache_key(self, user: str) -> Path:
         # IMPORTANT: the cache key is deliberately built only from model + system prompt +
-    # user prompt (NOT the provider), so already-injected interpretations are
-    # provider-independent.
-        h = hashlib.sha1((self.model + "\x00" + self.system + "\x00" + user).encode()).hexdigest()
-        return self.cache_dir / f"{h}.json"
+        # user prompt (NOT the provider), so already-injected interpretations are
+        # provider-independent. See :func:`cache_key`.
+        return self.cache_dir / f"{cache_key(self.model, self.system, user)}.json"
 
     # ---- provider calls -------------------------------------------------
     def _complete_anthropic(self, user: str, max_tokens: int) -> str:
@@ -348,6 +358,89 @@ class LlmClient:
                 print(f"  [llm] {tag} [{self.provider}]: {type(e).__name__}, retry in {wait}s")
                 time.sleep(wait)
         return None
+
+
+# ------------------------------------------------------------------ provider seam
+# The interpretation stage asks one question: "here are prompts, give me the answers".
+# Everything else -- keys, retries, caching, batching -- is the provider's business.
+# One method is therefore enough; ``live`` is the single flag the stage needs on top of
+# it, because a run without answers reports itself as export mode.
+
+@runtime_checkable
+class DeutungProvider(Protocol):
+    """Source of the per-chapter interpretations."""
+
+    #: True when the provider actually produces answers (as opposed to prompt export).
+    live: bool
+
+    def resolve(self, items: list[tuple[str, str]]) -> dict[str, dict | None]:
+        """Answer every ``(tag, prompt)`` pair; ``None`` where no answer is available."""
+
+
+class MissingFixtureError(KeyError):
+    """Raised when a :class:`FixtureProvider` has no frozen answer for a prompt."""
+
+    def __str__(self) -> str:                 # KeyError would quote the message
+        return self.args[0]
+
+
+class LiveProvider:
+    """The existing path: an :class:`LlmClient`, in single or batch mode.
+
+    Behaviour is unchanged in every respect -- same prompts, same cache, same batch
+    logic. The class only moves the call site behind an interface.
+    """
+
+    def __init__(self, root: Path, model: str, cache_dir: Path, export_dir: Path,
+                 provider: str = "anthropic", base_url: str | None = None,
+                 key_env: str | None = None, api_version: str | None = None,
+                 batch: bool = False, system: str | None = None):
+        self.client = LlmClient(root, model, cache_dir, export_dir, provider=provider,
+                                base_url=base_url, key_env=key_env,
+                                api_version=api_version, system=system)
+        self.batch = batch
+
+    @property
+    def live(self) -> bool:
+        return self.client.live
+
+    def resolve(self, items: list[tuple[str, str]]) -> dict[str, dict | None]:
+        if self.batch:
+            return self.client.ask_json_batch(items)
+        return {tag: self.client.ask_json(prompt, tag=tag) for tag, prompt in items}
+
+
+class FixtureProvider:
+    """Frozen answers from a JSON file, keyed exactly like the ``llm_cache``.
+
+    For tests only. A prompt without a frozen answer raises
+    :class:`MissingFixtureError` naming the missing key: the provider invents nothing
+    and never falls back silently to the extractive summary, which would let a test
+    pass while measuring nothing.
+    """
+
+    live = True
+
+    def __init__(self, path, model: str = "", system: str = ""):
+        self.path = Path(path)
+        self.model = model
+        self.system = system
+        self.answers: dict = json.loads(self.path.read_text(encoding="utf-8"))
+
+    def key(self, prompt: str) -> str:
+        """The ``llm_cache`` key of a prompt under this provider's model and system."""
+        return cache_key(self.model, self.system, prompt)
+
+    def resolve(self, items: list[tuple[str, str]]) -> dict[str, dict | None]:
+        out: dict[str, dict | None] = {}
+        for tag, prompt in items:
+            k = self.key(prompt)
+            if k not in self.answers:
+                raise MissingFixtureError(
+                    f"no frozen answer for chapter {tag!r} (key {k}) in {self.path} -- "
+                    "regenerate the fixture, the prompt has changed")
+            out[tag] = self.answers[k]
+        return out
 
 
 # ------------------------------------------------------------------ prompt building
@@ -598,6 +691,10 @@ def evidence_metrics(ev: str, hay: str) -> dict:
     }
 
 
+def _record_haystack(c: dict) -> str:
+    return " ".join(n2(c.get(k) or "").lower() for k in ("old_text", "new_text"))
+
+
 def change_haystack(deutung: dict, ch: dict) -> str:
     """Old and new text of the addressed change record, normalized and lower case.
 
@@ -605,22 +702,40 @@ def change_haystack(deutung: dict, ch: dict) -> str:
     interpretation fails closed instead of being checked against a foreign record.
     """
     i = deutung.get("change_index")
-    texts = []
     if isinstance(i, int) and 0 <= i < len(ch["changes"]):
-        c = ch["changes"][i]
-        texts = [c.get("old_text") or "", c.get("new_text") or ""]
-    return " ".join(n2(t).lower() for t in texts)
+        return _record_haystack(ch["changes"][i])
+    return ""
+
+
+def _evidence_unique(ev: str, deutung: dict, ch: dict) -> bool:
+    """True when the quote is strict in the addressed record and in no other (ENT-30).
+
+    A marker, not a gate: a quote that also fits a foreign record of the same chapter
+    is correct as often as not, but it cannot localize the interpretation -- and that
+    is the upper bound for undetectable ``change_index`` errors.
+    """
+    i = deutung.get("change_index")
+    for j, c in enumerate(ch["changes"]):
+        if j == i:
+            continue
+        if evidence_metrics(ev, _record_haystack(c))["evidence_strict"]:
+            return False
+    return True
 
 
 def check_evidence(deutung: dict, ch: dict) -> dict:
     """Check an interpretation's quote against its change record.
 
-    Returns the four fields written into ``deutung.json``: the unchanged
-    ``evidence_ok`` plus the diagnostics of :func:`evidence_metrics`.
+    Returns the five fields written into ``deutung.json``: the unchanged
+    ``evidence_ok``, the diagnostics of :func:`evidence_metrics` and
+    ``evidence_unique`` (ENT-30).
     """
     ev = n2(deutung.get("evidence") or "").lower()
     hay = change_haystack(deutung, ch)
-    return {"evidence_ok": _evidence_ok(ev, hay), **evidence_metrics(ev, hay)}
+    res = {"evidence_ok": _evidence_ok(ev, hay), **evidence_metrics(ev, hay)}
+    res["evidence_unique"] = (res["evidence_strict"]
+                              and _evidence_unique(ev, deutung, ch))
+    return res
 
 
 def _evidence_ok(ev: str, hay: str) -> bool:
@@ -643,19 +758,24 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                 model: str, scope: str = "core", provider: str = "anthropic",
                 base_url: str | None = None, key_env: str | None = None,
                 api_version: str | None = None, batch: bool = False,
-                language: str = "de", title: str = "") -> dict:
+                language: str = "de", title: str = "",
+                deutung_provider: DeutungProvider | None = None) -> dict:
     """Per-chapter interpretation. scope=core: chapters with substantive changes.
     provider/base_url/key_env/api_version steer the LLM backend; without a key the
     prompts are exported and summaries fall back to extractive.
     batch=True submits all uncached chapters in one Anthropic message batch (~50% cheaper,
     asynchronous). The JSON schema is neutral English; `language` decides in which language
-    the free-text values are written, `title` names the compared standard in the prompt."""
+    the free-text values are written, `title` names the compared standard in the prompt.
+    deutung_provider replaces the source of the answers (see :class:`DeutungProvider`);
+    the default is a :class:`LiveProvider` built from the arguments above, so existing
+    callers are unaffected."""
     o_secs = {s["id"]: s for s in old_doc["sections"]}
     n_secs = {s["id"]: s for s in new_doc["sections"]}
-    client = LlmClient(root, model, out_dir / "llm_cache", out_dir / "llm_prompts",
-                       provider=provider, base_url=base_url, key_env=key_env,
-                       api_version=api_version,
-                       system=build_system_prompt(language, title))
+    Path(out_dir).mkdir(parents=True, exist_ok=True)   # LiveProvider used to do this
+    answer_source = deutung_provider or LiveProvider(
+        root, model, out_dir / "llm_cache", out_dir / "llm_prompts",
+        provider=provider, base_url=base_url, key_env=key_env, api_version=api_version,
+        batch=batch, system=build_system_prompt(language, title))
 
     def sec_excerpt(secs, ids):
         txt = []
@@ -678,12 +798,9 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         jobs.append((ch, cid, re.sub(r"[^\w.]", "_", str(cid)), prompt, sel, old_x, new_x))
 
     # ---- phase 2: resolve the answers --------------------------------------------
-    # batch mode submits every uncached chapter in one asynchronous batch (~50% cheaper);
-    # otherwise the chapters are asked one by one.
-    if batch:
-        answers = client.ask_json_batch([(j[2], j[3]) for j in jobs])
-    else:
-        answers = {j[2]: client.ask_json(j[3], tag=j[2]) for j in jobs}
+    # The provider decides how: batch mode submits every uncached chapter in one
+    # asynchronous batch (~50% cheaper), otherwise the chapters are asked one by one.
+    answers = answer_source.resolve([(j[2], j[3]) for j in jobs])
 
     # ---- phase 3: assemble, guard the evidence, collect the review queue ----------
     results = []
@@ -728,7 +845,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     for r in results:
         for fb in r.get("pipeline_feedback") or []:
             feedback.append({"section_id": r.get("section_id"), **fb})
-    out = {"model": model if client.live else None, "mode": "api" if client.live else "export",
+    live = answer_source.live
+    out = {"model": model if live else None, "mode": "api" if live else "export",
            "language": language,
            "n_chapters": len(results), "n_llm": n_llm, "chapters": results,
            "review_queue": review, "pipeline_feedback": feedback}

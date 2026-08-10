@@ -54,3 +54,24 @@ of truth; the DOCX are derived and may be regenerated at any time.
 
 Markdown conventions: `##` and `###` start a section, the first token after the marker is
 the section number. `- ` starts a list item. Everything else is a paragraph.
+
+The section number is *not* written into the heading text -- Word numbers headings
+automatically, and the reader counts them from the heading levels. The builder checks the
+numbers in the Markdown against the numbering the reader will derive and refuses to write
+a document where the two disagree.
+
+## The reference run
+
+The deterministic stages over this corpus are the tracked regression baseline (ENT-27):
+no standard text, so it works in CI.
+
+```bash
+poetry run python tools/build_synthetic.py
+poetry run normpare compare --old tests/fixtures/synthetic/alt.docx \
+    --new tests/fixtures/synthetic/neu.docx --out baselines/synthetic --no-llm
+poetry run python tools/regression.py --dir baselines/synthetic          # check
+poetry run python tools/regression.py --dir baselines/synthetic --update # refresh
+```
+
+`baselines/synthetic.json` is tracked, the run directory `baselines/synthetic/` is not --
+it is reproduced byte for byte from the Markdown by the three commands above.

@@ -12,10 +12,16 @@ none touches the network. The guard reports four quantities per interpretation:
     number of characters actually covered by the source text.
 ``evidence_fragments``
     number of fragments after splitting at ellipsis marks.
+``evidence_unique``
+    strict in the addressed change record and in no other record of the chapter
+    (ENT-30) -- a marker, not a gate.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import tomllib
 
 from normpare.stages.deutung import check_asset_evidence, check_evidence
 
@@ -198,3 +204,96 @@ def test_asset_evidence_reports_the_same_four_quantities():
     assert split["evidence_strict"] is True
     short = check_asset_evidence({"evidence": "kurz"}, ASSET_HAY)
     assert short["evidence_ok"] is False
+
+
+# -- evidence_unique (ENT-30) --------------------------------------------------------------
+
+OTHER = "die pruefung erfolgt nach den vorgaben des netzbetreibers"
+
+
+def _two_records(first_new: str, second_new: str) -> dict:
+    return {"changes": [{"old_text": "", "new_text": first_new},
+                        {"old_text": "", "new_text": second_new}]}
+
+
+def _check_in(chapter: dict, evidence: str, index: int = 0) -> dict:
+    return check_evidence({"change_index": index, "evidence": evidence}, chapter)
+
+
+def test_evidence_unique_true_for_a_single_match():
+    """The quote is verbatim in the addressed record and nowhere else in the chapter."""
+    res = _check_in(_two_records(SOURCE, OTHER), "die anforderungen an die messeinrichtung")
+    assert res["evidence_strict"] is True
+    assert res["evidence_unique"] is True
+
+
+def test_evidence_unique_false_when_another_record_matches():
+    """The same quote also fits a foreign record -- the interpretation is not localizable.
+
+    This is the upper bound for undetectable ``change_index`` errors (ENT-30): the
+    interpretation may address the wrong record without anyone noticing.
+    """
+    res = _check_in(_two_records(SOURCE, SOURCE + " und weiteres"),
+                    "die anforderungen an die messeinrichtung")
+    assert res["evidence_strict"] is True
+    assert res["evidence_unique"] is False
+
+
+def test_evidence_unique_requires_strict():
+    """Without a complete match in the addressed record there is nothing unique to report."""
+    res = _check_in(_two_records(SOURCE, OTHER),
+                    "die anforderungen an die schutzeinrichtung sind zu pruefen")
+    assert res["evidence_ok"] is True
+    assert res["evidence_strict"] is False
+    assert res["evidence_unique"] is False
+
+
+# -- the four evidence cases of the synthetic corpus ----------------------------------------
+
+def _addressed_record(chapter: dict, quote: str) -> tuple[int, dict]:
+    """Index of the record the quote covers best, plus the result of the guard there.
+
+    ``erwartung.toml`` names the chapter, not the change record; the record with the
+    most covered characters is the one the quote is about (ties: the first).
+    """
+    results = [check_evidence({"change_index": i, "evidence": quote}, chapter)
+               for i in range(len(chapter["changes"]))]
+    best = max(range(len(results)), key=lambda i: results[i]["evidence_match_chars"])
+    return best, results[best]
+
+
+#: Expectation keys of ``erwartung.toml`` and the field of the guard they pin down.
+_EVIDENCE_FIELDS = (("erwartet_ok", "evidence_ok"),
+                    ("erwartet_strict", "evidence_strict"),
+                    ("erwartet_fragmente", "evidence_fragments"),
+                    ("erwartet_unique", "evidence_unique"))
+
+#: Cases the corpus cannot exercise today, with the reason and the responsible package.
+#: The expectation is *not* softened -- it stays in the file and stays checked.
+_KNOWN_GAPS = {
+    "nicht_eindeutig":
+        "AP-07 (correspondence graph): chapter 4.1 yields a single change record, "
+        "because both sentences of the new 4.1 live in one paragraph and the second "
+        "occurrence of the quote sits in the record of chapter 4, which absorbs the "
+        "new 4.2. Uniqueness is scoped per chapter (ENT-30), so the quote comes out "
+        "unique. Whether the scope or the corpus has to change is a question for Cowork.",
+}
+
+_EVIDENCE_CASES = tomllib.loads(
+    (Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "synthetic"
+     / "erwartung.toml").read_text(encoding="utf-8"))["evidenz"]
+
+
+@pytest.mark.parametrize("case", _EVIDENCE_CASES, ids=[c["fall"] for c in _EVIDENCE_CASES])
+def test_synthetic_evidence_cases(case, request, synthetic_run):
+    """The four evidence cases of ``erwartung.toml`` over the real change records."""
+    if case["fall"] in _KNOWN_GAPS:
+        request.node.add_marker(pytest.mark.xfail(reason=_KNOWN_GAPS[case["fall"]],
+                                                  strict=True))
+    by_new = {ch.get("new_id"): ch for ch in synthetic_run.synopse["chapters"]}
+    chapter = by_new.get(case["kapitel"])
+    assert chapter is not None, f"chapter {case['kapitel']} is missing from the synopsis"
+    _index, res = _addressed_record(chapter, case["zitat"])
+    for key, field in _EVIDENCE_FIELDS:
+        if key in case:
+            assert res[field] == case[key], f"{field} of case {case['fall']}"

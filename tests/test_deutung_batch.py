@@ -44,7 +44,10 @@ class _FakeAnthropic:
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    # all three variables resolve_key() consults -- removing only ANTHROPIC_API_KEY left
+    # LLM_API_KEY and OPENAI_API_KEY as a way into a live client
+    for var in ("ANTHROPIC_API_KEY", "LLM_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
     c = LlmClient(tmp_path, "test-model", tmp_path / "cache", tmp_path / "prompts")
     c.live = True            # bypass the SDK/key setup; we inject a fake below
     c.provider = "anthropic"

@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Every run writes a `manifest.json`: schema version, normpare version, timestamp, both
+  input files with their SHA-256 and every effective parameter. Without it an output
+  directory cannot say what produced it.
+- The interpretation stage takes a provider (`DeutungProvider`). `LiveProvider` is the
+  existing path; `FixtureProvider` serves frozen answers from a JSON file, which makes the
+  stage testable without a network call.
+- A fifth evidence field, `evidence_unique`: the quote occurs verbatim in the addressed
+  change record and in no other record of the same chapter. It is reported, not enforced.
+- A synthetic corpus (`tests/fixtures/synthetic/`) exercising renumbering, moves, merges,
+  additions, removals and four evidence cases. It contains no text from any real standard,
+  so it ships with the package and runs in CI; `tools/build_synthetic.py` turns it into the
+  DOCX pair the pipeline reads.
+
 ### Changed
 
 - `evidence_ok` is being reframed. A literature review (2026-08) established that the

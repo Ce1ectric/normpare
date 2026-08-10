@@ -19,8 +19,10 @@ env/
 # Läufe / lokale Ausgaben
 out/
 llm_cache/
-# Regressions-Baselines: verweisen auf lokale Referenzverzeichnisse (offene Frage AP-01)
-baselines/
+# Regressions-Baselines: verweisen auf lokale Referenzverzeichnisse (offene Frage AP-01).
+# Ausnahme: die synthetische Baseline enthält keinen Normtext und ist CI-tauglich (ENT-27).
+baselines/*
+!baselines/synthetic.json
 
 # Schlüssel / Umgebung (niemals committen)
 .api_key
@@ -50,3 +52,7 @@ nachtlauf.sh
 
 # Urheberrechtlich geschützte Korpus-Fixtures
 tests/fixtures/korpus/
+
+# Synthetischer Korpus: die Markdown-Dateien sind die Quelle, die DOCX sind abgeleitet
+# (tools/build_synthetic.py erzeugt sie neu)
+tests/fixtures/synthetic/*.docx
