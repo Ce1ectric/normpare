@@ -1,0 +1,109 @@
+"""
+replay.py -- recompute the deterministic stages of a reference run.
+
+Copies the frozen inputs of a reference directory (``alt/norm_doc.json``,
+``neu/norm_doc.json``, plus ``deutung.json`` and the vector cache as frozen
+artifacts) into a destination below ``runs/`` and runs the stages ``map``,
+``align``, ``synopse``, ``keywords`` and ``report`` on them. The ingest and enrich
+stages are skipped: the reference ``norm_doc.json`` files are already enriched.
+
+The interpretation stage is *never* run -- no LLM call, no network. The Hugging
+Face libraries are pinned to offline mode, and every vector the embedding rescue
+pass needs is already in the copied cache.
+
+The destination must lie below ``runs/``; ``regression.guard_write`` refuses any
+target below ``out/``, because the reference runs are irreplaceable.
+
+Usage::
+
+    python tools/replay.py --reference out/4110_hot --dest runs/AP-01_2026-08-10/replay
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+import regression
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+#: Copied from the reference run, not recomputed.
+FROZEN = ("alt/norm_doc.json", "neu/norm_doc.json", "deutung.json", ".vec_cache.npz")
+
+#: Everything except ``ingest``, ``enrich`` (already applied) and ``deutung`` (LLM).
+STAGES = ["map", "align", "synopse", "keywords", "report"]
+
+
+def _offline() -> None:
+    """Pin the embedding stack to local files, so a missing model fails loudly."""
+    for var in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"):
+        os.environ[var] = "1"
+
+
+def stage_inputs(reference: Path, dest: Path) -> list[str]:
+    """Copy the frozen inputs into ``dest``. Returns the names actually copied."""
+    regression.guard_write(dest)
+    copied = []
+    for name in FROZEN:
+        src = reference / name
+        if not src.exists():
+            continue
+        target = regression.guard_write(dest / name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, target)
+        copied.append(name)
+    return copied
+
+
+def build_config(reference: Path, dest: Path):
+    """Rebuild the run configuration from what the reference artifacts record."""
+    from normpare.config import Config, SourceSpec
+
+    mapping = json.loads((reference / "mapping.json").read_text(encoding="utf-8"))
+    pair = mapping.get("pair") or ""
+    old_label, _, new_label = pair.partition(" <-> ")
+    # the rescue pass left its trace in the reference mapping, so replay it the same way
+    embed = "embed_rescue" in mapping
+    return Config(
+        old=SourceSpec("", old_label, old_label, "old"),
+        new=SourceSpec("", new_label, new_label, "new"),
+        out_dir=str(dest), run_name=reference.name, pair_label=pair,
+        embed_fallback=embed,
+    )
+
+
+def replay(reference: Path, dest: Path) -> Path:
+    """Copy the frozen inputs and recompute the deterministic stages into ``dest``."""
+    from normpare.pipeline import Pipeline
+
+    _offline()
+    copied = stage_inputs(reference, dest)
+    print(f"[replay] frozen inputs copied: {', '.join(copied)}")
+    cfg = build_config(reference, dest)
+    print(f"[replay] embed rescue pass: {'on' if cfg.embed_fallback else 'off'}")
+    Pipeline(cfg).run(STAGES, use_llm=False)
+    print(f"[replay] stages recomputed: {', '.join(STAGES)}")
+    return dest
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--reference", required=True, help="reference run directory (read only)")
+    ap.add_argument("--dest", required=True, help="destination below runs/")
+    ap.add_argument("--baseline", default=None,
+                    help="baseline to compare the replay against (default: none)")
+    args = ap.parse_args(argv)
+
+    dest = replay(Path(args.reference), Path(args.dest))
+    if not args.baseline:
+        return 0
+    return regression.check(dest, Path(args.baseline), explain=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

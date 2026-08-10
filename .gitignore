@@ -19,6 +19,8 @@ env/
 # Läufe / lokale Ausgaben
 out/
 llm_cache/
+# Regressions-Baselines: verweisen auf lokale Referenzverzeichnisse (offene Frage AP-01)
+baselines/
 
 # Schlüssel / Umgebung (niemals committen)
 .api_key
