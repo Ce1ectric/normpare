@@ -598,6 +598,20 @@ def evidence_metrics(ev: str, hay: str) -> dict:
     }
 
 
+def change_haystack(deutung: dict, ch: dict) -> str:
+    """Old and new text of the addressed change record, normalized and lower case.
+
+    An absent or out-of-range ``change_index`` yields an empty haystack, so the
+    interpretation fails closed instead of being checked against a foreign record.
+    """
+    i = deutung.get("change_index")
+    texts = []
+    if isinstance(i, int) and 0 <= i < len(ch["changes"]):
+        c = ch["changes"][i]
+        texts = [c.get("old_text") or "", c.get("new_text") or ""]
+    return " ".join(n2(t).lower() for t in texts)
+
+
 def check_evidence(deutung: dict, ch: dict) -> dict:
     """Check an interpretation's quote against its change record.
 
@@ -605,12 +619,7 @@ def check_evidence(deutung: dict, ch: dict) -> dict:
     ``evidence_ok`` plus the diagnostics of :func:`evidence_metrics`.
     """
     ev = n2(deutung.get("evidence") or "").lower()
-    i = deutung.get("change_index")
-    texts = []
-    if isinstance(i, int) and 0 <= i < len(ch["changes"]):
-        c = ch["changes"][i]
-        texts = [c.get("old_text") or "", c.get("new_text") or ""]
-    hay = " ".join(n2(t).lower() for t in texts)
+    hay = change_haystack(deutung, ch)
     return {"evidence_ok": _evidence_ok(ev, hay), **evidence_metrics(ev, hay)}
 
 
