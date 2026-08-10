@@ -45,6 +45,24 @@ def test_manifest_records_schema_version_and_inputs(tmp_path):
     assert man["inputs"]["old"]["path"].endswith("alt.docx")
 
 
+def test_manifest_survives_a_run_without_source_files(tmp_path):
+    """A replay has no source files -- it starts from the frozen ``norm_doc.json``.
+
+    ``SourceSpec.path`` is empty there, and an empty path is the current directory. The
+    manifest must record "no input file" instead of trying to hash a directory, or the
+    replay driver cannot run at all.
+    """
+    from normpare.config import Config as _Config
+    from normpare.config import SourceSpec
+
+    cfg = _Config(old=SourceSpec("", "old", "old", "old"),
+                  new=SourceSpec("", "new", "new", "new"),
+                  out_dir=str(tmp_path / "out"), run_name="replay", pair_label="old <-> new")
+    inputs = build_manifest(cfg, stages=["map"], use_llm=False)["inputs"]
+    assert inputs["old"]["sha256"] is None and inputs["old"]["bytes"] is None
+    assert inputs["new"]["sha256"] is None and inputs["new"]["bytes"] is None
+
+
 def test_manifest_records_every_effective_parameter(tmp_path):
     """Anything that steers the result is in the manifest -- a baseline must be
     self-explanatory without guessing the run parameters."""

@@ -270,14 +270,12 @@ _EVIDENCE_FIELDS = (("erwartet_ok", "evidence_ok"),
 
 #: Cases the corpus cannot exercise today, with the reason and the responsible package.
 #: The expectation is *not* softened -- it stays in the file and stays checked.
-_KNOWN_GAPS = {
-    "nicht_eindeutig":
-        "AP-07 (correspondence graph): chapter 4.1 yields a single change record, "
-        "because both sentences of the new 4.1 live in one paragraph and the second "
-        "occurrence of the quote sits in the record of chapter 4, which absorbs the "
-        "new 4.2. Uniqueness is scoped per chapter (ENT-30), so the quote comes out "
-        "unique. Whether the scope or the corpus has to change is a question for Cowork.",
-}
+#:
+#: ``nicht_eindeutig`` stood here until the corpus was corrected (2026-08-10): the
+#: exception of chapter 4.1 is a paragraph of its own since then, so the chapter has the
+#: two change records the case needs and ``evidence_unique`` comes out ``false`` as
+#: ``erwartung.toml`` demands. The gap is gone; the case is checked like every other.
+_KNOWN_GAPS: dict[str, str] = {}
 
 _EVIDENCE_CASES = tomllib.loads(
     (Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "synthetic"

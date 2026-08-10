@@ -21,6 +21,26 @@ All notable changes to this project are documented here. The format is based on
   so it ships with the package and runs in CI; `tools/build_synthetic.py` turns it into the
   DOCX pair the pipeline reads.
 
+### Fixed
+
+- A passage that survived into a merged successor paragraph is no longer reported as
+  removed. Where two old paragraphs become one new one and the first is already paired,
+  the merge pass finds no free window and the second was reported as dropped — a claim
+  that a duty had fallen away while it stood verbatim in the new edition. A leftover old
+  paragraph whose text is *contained* in an already paired new paragraph now joins that
+  link (`kind: "merged"`, both sources in `old_ids`). Structural containment, not a
+  lowered similarity threshold. Measured on the 4110 pair: 17 of 405 removal reports
+  disappear, and the audit finds no false removal left.
+- `manifest.json` no longer fails on a run without source files (a replay starts from the
+  frozen `norm_doc.json`); a path that is not a readable file is recorded as absent.
+
+### Added
+
+- `tools/removed_audit.py` checks every reported removal against the full text of the new
+  edition and classifies it: a genuine removal, a false positive in the mapped counterpart
+  chapter (paragraph alignment), or a move into another chapter (chapter alignment). For
+  false positives it also names the structural constellation behind them.
+
 ### Changed
 
 - `evidence_ok` is being reframed. A literature review (2026-08) established that the

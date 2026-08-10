@@ -2,34 +2,34 @@
  "artifacts": {
   "alt/norm_doc.json": {
    "bytes": 17057,
-   "sha256": "62c6a9928c07d676d110b3f0e5abc62ca66113587d39940dea276a42b3a39eb4"
+   "sha256": "c9598dcf2e8649c56006f0cbd5710793e3cfc8be2fa1acf205be401f0d599dd8"
   },
   "chapters.json": {
-   "bytes": 21206,
-   "sha256": "a341dcef0b91ecc385e7983647fd10168054fa3af76e024c0c2433936c0e663c"
+   "bytes": 20831,
+   "sha256": "0e96cdfa537105f7e70534833b9101c160622a53a195ba3e5198c19295ff3051"
   },
   "keywords.json": {
    "bytes": 726,
    "sha256": "3e956a9e45e75cb7776a413034635299859c23aa4ac41a69c20ba2f200b75a76"
   },
   "mapping.json": {
-   "bytes": 8168,
-   "sha256": "76f5f1b3df4a0fb5aa8da2150fd704b6e102d34c17c1e1c6481ca8303abbd336"
+   "bytes": 8062,
+   "sha256": "ca7e537da32b6bd18bcf4db5e0adfdeec122550cca63adbbd53aea30d1da6cc8"
   },
   "neu/norm_doc.json": {
    "bytes": 17209,
-   "sha256": "23793bbf00701adcca351ba160fa6c7777890ddbe88099a0fbc1120879ac763a"
+   "sha256": "287ee8f3bd31bbb4e10d6e0a4f276ac95bffb4117529d8305bc3399a6cfe78a7"
   },
   "statistics.json": {
-   "bytes": 1026,
-   "sha256": "25f4e4a9544467d71f715b055fc69b4c5a47cbe3b591fd4acf0db2a59b7b0518"
+   "bytes": 1042,
+   "sha256": "8228c2d548b0dfc54b4bd65b8ff79c05aab70486c5f67a4207809ff823d6531d"
   },
   "synopse.json": {
-   "bytes": 17304,
-   "sha256": "aadd1ba57dcd6b1efedd6ff546d22ce8623c63c7fc092db0c81f8398738d55e6"
+   "bytes": 16944,
+   "sha256": "9d55fd19a628cc61d7182aada0ed50769941ad80fb38734ee34c356f0073c56f"
   }
  },
- "created": "2026-08-10T19:27:36Z",
+ "created": "2026-08-10T19:49:48Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "baselines/synthetic",
@@ -55,9 +55,10 @@
   },
   "synopse": {
    "change_kinds": {
+    "merged": 1,
     "new": 4,
-    "removed": 2,
-    "similar": 5
+    "removed": 1,
+    "similar": 4
    },
    "n_chapters": 15,
    "tables_fragment": 0,
