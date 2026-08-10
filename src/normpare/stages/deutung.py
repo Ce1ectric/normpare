@@ -480,8 +480,14 @@ def asset_haystack(ch: dict, o_secs: dict, n_secs: dict) -> str:
     return n2(" ".join(parts)).lower()
 
 
-def check_asset_evidence(item: dict, hay: str) -> bool:
+def check_asset_evidence(item: dict, hay: str) -> dict:
+    """Evidence guard for table/figure interpretations, see :func:`check_evidence`."""
     ev = n2(item.get("evidence") or "").lower()
+    return {"evidence_ok": _asset_evidence_ok(ev, hay), **evidence_metrics(ev, hay)}
+
+
+def _asset_evidence_ok(ev: str, hay: str) -> bool:
+    """The historical asset rule -- kept unchanged (40-character probe)."""
     if len(ev) < 8:
         return False
     return ev in hay or ev[:40] in hay
@@ -543,7 +549,61 @@ def extractive_summary(text: str, n: int = 3) -> str:
     return " ".join(sents[:n])
 
 
-def check_evidence(deutung: dict, ch: dict) -> bool:
+# Ellipsis marks a model writes into a supposedly verbatim quote: U+2026 and three
+# dots, each also in brackets, with any surrounding whitespace.
+_ELLIPSIS = re.compile(r"\s*(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)\s*")
+
+
+def evidence_fragments(ev: str) -> list[str]:
+    """Split a quote at ellipsis marks; fragments empty after trimming are dropped."""
+    return [f for f in (part.strip() for part in _ELLIPSIS.split(ev)) if f]
+
+
+def _matched_chars(fragment: str, hay: str) -> int:
+    """Length of the longest prefix of ``fragment`` that occurs verbatim in ``hay``.
+
+    Binary search: prefix containment is monotone -- if ``fragment[:n]`` is present,
+    every shorter prefix is present too.
+    """
+    lo, hi = 0, len(fragment)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if fragment[:mid] in hay:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def evidence_metrics(ev: str, hay: str) -> dict:
+    """The three diagnostic quantities next to ``evidence_ok`` (ENT-18, ENT-19).
+
+    ``evidence_strict``
+        every fragment of the quote occurs completely in ``hay``.
+    ``evidence_match_chars``
+        characters actually covered, summed over the fragments -- five fragments of
+        eight characters are worth less than one contiguous span of forty.
+    ``evidence_fragments``
+        number of fragments after splitting at the ellipsis marks.
+
+    The split affects these three values only; ``evidence_ok`` keeps its historical
+    definition so that the baseline stays comparable.
+    """
+    frags = evidence_fragments(ev)
+    matched = [_matched_chars(f, hay) for f in frags]
+    return {
+        "evidence_strict": bool(frags) and all(m == len(f) for m, f in zip(matched, frags)),
+        "evidence_match_chars": sum(matched),
+        "evidence_fragments": len(frags),
+    }
+
+
+def check_evidence(deutung: dict, ch: dict) -> dict:
+    """Check an interpretation's quote against its change record.
+
+    Returns the four fields written into ``deutung.json``: the unchanged
+    ``evidence_ok`` plus the diagnostics of :func:`evidence_metrics`.
+    """
     ev = n2(deutung.get("evidence") or "").lower()
     i = deutung.get("change_index")
     texts = []
@@ -551,6 +611,16 @@ def check_evidence(deutung: dict, ch: dict) -> bool:
         c = ch["changes"][i]
         texts = [c.get("old_text") or "", c.get("new_text") or ""]
     hay = " ".join(n2(t).lower() for t in texts)
+    return {"evidence_ok": _evidence_ok(ev, hay), **evidence_metrics(ev, hay)}
+
+
+def _evidence_ok(ev: str, hay: str) -> bool:
+    """The historical rule, unchanged: 15-character probe plus short-quote branch.
+
+    Deliberately blind to ellipsis marks -- it only ever sees the fragment before the
+    first one. That weakness is what ``evidence_strict`` measures; changing this
+    function would break parity with the baseline.
+    """
     if not ev:
         return False
     if len(ev) < 15:
@@ -624,18 +694,20 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
             n_llm += 1
             data["_source"] = "llm"
             for d in data.get("interpretations", []):
-                d["evidence_ok"] = check_evidence(d, ch)
+                d.update(check_evidence(d, ch))
+                # the review queue still keys on evidence_ok (ENT-18): it switches to
+                # evidence_strict once the difference between both is quantified
                 if d.get("contradiction_flag") or not d["evidence_ok"]:
                     review.append({"section_id": cid, **d})
             # table/figure interpretations: check evidence against cells/captions
             if data.get("tables") or data.get("figures"):
                 hay = asset_haystack(ch, o_secs, n_secs)
                 for a in (data.get("tables") or []):
-                    a["evidence_ok"] = check_asset_evidence(a, hay)
+                    a.update(check_asset_evidence(a, hay))
                     if not a["evidence_ok"]:
                         review.append({"section_id": cid, "asset": "table", **a})
                 for a in (data.get("figures") or []):
-                    a["evidence_ok"] = check_asset_evidence(a, hay)
+                    a.update(check_asset_evidence(a, hay))
                     if not a["evidence_ok"]:
                         review.append({"section_id": cid, "asset": "figure", **a})
         data["_changes_total"] = len(ch["changes"])
