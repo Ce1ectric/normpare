@@ -2,34 +2,34 @@
  "artifacts": {
   "alt/norm_doc.json": {
    "bytes": 17057,
-   "sha256": "b59fbb95137a937df1b20e35f8d1b406e0de4b604c710a11261c3532e2a35e36"
+   "sha256": "62c6a9928c07d676d110b3f0e5abc62ca66113587d39940dea276a42b3a39eb4"
   },
   "chapters.json": {
-   "bytes": 21027,
-   "sha256": "75e4836fa5bfd99082ec8ca75d6e16dd785c6009659ef81e90f747c9e89575f5"
+   "bytes": 21206,
+   "sha256": "a341dcef0b91ecc385e7983647fd10168054fa3af76e024c0c2433936c0e663c"
   },
   "keywords.json": {
    "bytes": 726,
    "sha256": "3e956a9e45e75cb7776a413034635299859c23aa4ac41a69c20ba2f200b75a76"
   },
   "mapping.json": {
-   "bytes": 8051,
-   "sha256": "a46caf1965b0abf45661a3e02c6febdbcd060f44026ddae26faf08b9becd69af"
+   "bytes": 8168,
+   "sha256": "76f5f1b3df4a0fb5aa8da2150fd704b6e102d34c17c1e1c6481ca8303abbd336"
   },
   "neu/norm_doc.json": {
-   "bytes": 16888,
-   "sha256": "bfcd2624149235fc9e93335c4d272b3399799d0101f6ff1284dc6e4bc3a5dbb9"
+   "bytes": 17209,
+   "sha256": "23793bbf00701adcca351ba160fa6c7777890ddbe88099a0fbc1120879ac763a"
   },
   "statistics.json": {
    "bytes": 1026,
-   "sha256": "c2ea9d321fd19d29883f7a2d8cdb8f75396c6a8c8f6ddf24085e46c88cc2c94a"
+   "sha256": "25f4e4a9544467d71f715b055fc69b4c5a47cbe3b591fd4acf0db2a59b7b0518"
   },
   "synopse.json": {
-   "bytes": 17125,
-   "sha256": "8924844e6278240452b19e3d98b0002320bcbe0a3c80d504c7af1fc2f22bc8c0"
+   "bytes": 17304,
+   "sha256": "aadd1ba57dcd6b1efedd6ff546d22ce8623c63c7fc092db0c81f8398738d55e6"
   }
  },
- "created": "2026-08-10T18:39:01Z",
+ "created": "2026-08-10T19:27:36Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "baselines/synthetic",
@@ -43,7 +43,7 @@
   },
   "norm_neu": {
    "figures": 0,
-   "paragraphs": 21,
+   "paragraphs": 22,
    "sections": 16,
    "tables": 0
   },
@@ -55,7 +55,7 @@
   },
   "synopse": {
    "change_kinds": {
-    "new": 3,
+    "new": 4,
     "removed": 2,
     "similar": 5
    },
