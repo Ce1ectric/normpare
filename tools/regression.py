@@ -16,6 +16,11 @@ Usage::
     python tools/regression.py --dir out/4110_hot              # check against it
     python tools/regression.py --dir runs/.../replay --name 4110_hot --explain
 
+A baseline may declare ``known_deviations`` (ENT-25): an artifact that is allowed to
+differ from the reference as long as its hash equals the documented
+``expected_sha256``. Every such entry needs a reason and evidence, otherwise the
+harness refuses to run -- an undocumented exception would be a silencer.
+
 The baseline is a JSON file under ``baselines/``; the reference artifacts themselves
 are *not* copied, the baseline only points at the directory they live in. The
 harness never opens a path below ``out/`` for writing (:func:`guard_write`) -- the
@@ -54,8 +59,17 @@ HARD_MIN = ["deutung.paragraph_evidence_ok", "deutung.tabellen_evidence_ok",
             "deutung.bilder_evidence_ok", "deutung.chapters_deuted"]
 
 
+#: Fields every ``known_deviations`` entry must carry (ENT-25). An exception without
+#: a reason and without evidence would be a silencer, not a documented deviation.
+DEVIATION_FIELDS = ("expected_sha256", "grund", "belegt_durch")
+
+
 class WriteToOutError(RuntimeError):
     """Raised when something tries to write below an ``out/`` directory."""
+
+
+class BaselineError(RuntimeError):
+    """Raised when a baseline is malformed -- e.g. an undocumented known deviation."""
 
 
 def guard_write(path) -> Path:
@@ -218,6 +232,25 @@ def read_baseline(path):
     return _load(Path(path))
 
 
+def known_deviations(base: dict) -> dict:
+    """Validated ``known_deviations`` block of a baseline (ENT-25).
+
+    An artifact listed here may differ from the reference *as long as* its hash equals
+    the recorded ``expected_sha256``; the exception is pinned to one concrete state.
+    Every entry needs :data:`DEVIATION_FIELDS`, otherwise the harness refuses to run.
+    """
+    known = (base or {}).get("known_deviations") or {}
+    for art in sorted(known):
+        entry = known[art]
+        missing = ([f for f in DEVIATION_FIELDS if not (entry or {}).get(f)]
+                   if isinstance(entry, dict) else list(DEVIATION_FIELDS))
+        if missing:
+            raise BaselineError(
+                f"known_deviations[{art}] is missing: {', '.join(missing)} -- "
+                "an exception without a documented reason and evidence is not allowed")
+    return known
+
+
 # -- explain ---------------------------------------------------------------------------
 
 def _first_byte_diff(a: Path, b: Path) -> int | None:
@@ -300,18 +333,27 @@ def check(out_dir, baseline_path, explain: bool = False) -> int:
         return 0
     name = base.get("name", name)
 
+    known = known_deviations(base)
     cur_art = artifact_digests(out)
     base_art = base.get("artifacts") or {}
     ref_dir = Path(base.get("reference_dir", ""))
-    missing, differing, added = [], [], []
+    missing, differing, added, accepted, resolved = [], [], [], [], []
     for art in sorted(set(base_art) | set(cur_art)):
         a, b = base_art.get(art), cur_art.get(art)
+        entry = known.get(art)
         if b is None:
             missing.append(art)
         elif a is None:
             added.append(art)
         elif a["sha256"] != b["sha256"]:
-            differing.append((art, a, b))
+            if entry and entry["expected_sha256"] == b["sha256"]:
+                accepted.append((art, entry))
+            else:
+                differing.append((art, a, b, entry))
+        elif entry and out.resolve() != ref_dir.resolve():
+            # equality with the reference is only news for a *run*; the reference
+            # directory itself trivially equals itself
+            resolved.append(art)
 
     cur_snap = _flatten(snapshot(out))
     base_snap = _flatten(base.get("snapshot") or {})
@@ -324,21 +366,32 @@ def check(out_dir, baseline_path, explain: bool = False) -> int:
                     and isinstance(b, (int, float)) and b < a):
                 dropped.append(k)
 
-    if not (missing or differing or added or changed):
+    if not (missing or differing or added or changed or accepted or resolved):
         print(f"[{name}] OK -- identical to baseline "
               f"({len(cur_art)} artifacts byte for byte).")
         return 0
 
-    if missing or differing:
+    if missing or differing or accepted or resolved:
         print(f"[{name}] artifacts:")
     for art in missing:
         print(f"   {art}: MISSING in the run  -- REGRESSION")
-    for art, a, b in differing:
+    for art, a, b, entry in differing:
         print(f"   {art}: differs  {a['bytes']} -> {b['bytes']} bytes  -- REGRESSION")
         print(f"      sha256 {a['sha256'][:16]}... -> {b['sha256'][:16]}...")
+        if entry:
+            print(f"      matches neither the reference nor the known deviation "
+                  f"({entry['expected_sha256'][:16]}...)")
         if explain:
             for line in explain_artifact(ref_dir / art, out / art):
                 print(line)
+    for art, entry in accepted:
+        print(f"   {art}: known deviation, hash as documented (no regression)")
+        print(f"      reason: {entry['grund'].strip()}")
+        print(f"      evidence: {entry['belegt_durch']}"
+              + (f", recorded {entry['aufgenommen']}" if entry.get("aufgenommen") else ""))
+    for art in resolved:
+        print(f"   {art}: matches the reference again -- the known deviation "
+              f"can be removed from the baseline")
     for art in added:
         print(f"   {art}: new, not in the baseline (no regression)")
     if changed:
@@ -351,6 +404,9 @@ def check(out_dir, baseline_path, explain: bool = False) -> int:
         n = len(missing) + len(differing) + len(dropped)
         print(f"[{name}] {n} regression(s).")
         return 1
+    if accepted and not (added or changed or resolved):
+        print(f"[{name}] OK -- 0 regressions, {len(accepted)} known deviation(s).")
+        return 0
     print(f"[{name}] differences, but no regression (use --update to accept).")
     return 0
 
@@ -367,11 +423,23 @@ def main(argv=None) -> int:
     out = Path(args.dir)
     name = args.name or out.name
     path = Path(args.baseline_dir) / f"{name}.json"
-    if args.update:
-        write_baseline(build_baseline(out, name), path)
-        print(f"[{name}] baseline written: {path}")
-        return 0
-    return check(out, path, explain=args.explain)
+    try:
+        if args.update:
+            baseline = build_baseline(out, name)
+            # carry documented deviations over -- dropping them silently would lose
+            # the reason they were recorded for
+            previous = known_deviations(read_baseline(path))
+            if previous:
+                baseline["known_deviations"] = previous
+                print(f"[{name}] kept {len(previous)} known deviation(s) from the "
+                      "previous baseline -- check whether they still apply.")
+            write_baseline(baseline, path)
+            print(f"[{name}] baseline written: {path}")
+            return 0
+        return check(out, path, explain=args.explain)
+    except BaselineError as exc:
+        print(f"[{name}] invalid baseline: {exc}")
+        return 2
 
 
 if __name__ == "__main__":
