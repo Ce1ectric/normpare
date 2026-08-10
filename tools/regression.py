@@ -40,9 +40,19 @@ ROOT = Path(__file__).resolve().parent.parent
 BASE_DIR = ROOT / "baselines"
 SCHEMA = 1
 
+#: Artifacts deliberately kept out of the byte comparison, with the reason. Nothing here
+#: can be byte-identical between two runs of the same input, so comparing them would
+#: report a regression on every run.
+NOT_COMPARED = {
+    "deutung.json": "depends on the LLM; covered by the metric snapshot instead",
+    "manifest.json": "contains the run timestamp (ENT-29)",
+    "*.docx": "Word writes a creation timestamp into the package",
+    "*.pptx": "same as .docx",
+    "*.html": "carries the generation timestamp",
+}
+
 #: Artifacts compared byte for byte -- everything that is produced without an LLM.
-#: ``deutung.json`` is deliberately absent (LLM-dependent), as are ``.docx``/``.pptx``/
-#: ``.html`` (timestamps and binary structures).
+#: What is missing here and why is listed in :data:`NOT_COMPARED`.
 ARTIFACTS = (
     "chapters.json",
     "keywords.json",

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .config import Config
 from .errors import MissingInputError
+from .manifest import write_manifest
 
 STAGES = ["ingest", "enrich", "map", "align", "synopse", "keywords", "deutung", "report"]
 
@@ -60,6 +61,9 @@ class Pipeline:
             if name not in STAGES:
                 raise ValueError(f"unknown stage: {name}")
             getattr(self, name)()
+        # every run says what produced it: version, inputs with hash, parameters,
+        # schema version (ENT-29)
+        write_manifest(self.cfg, self.out, stages=names, use_llm=use_llm)
         run = self.cfg.run_name
         return RunResult(
             out_dir=str(self.out), run_name=run,
