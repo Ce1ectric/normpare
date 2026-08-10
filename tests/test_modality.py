@@ -5,7 +5,7 @@ import pytest
 import tomllib
 
 from normpare.stages.enrich import modality
-from normpare.stages.enrich.modality import classify_sentence, classify_paragraph, shift
+from normpare.stages.enrich.modality import classify_paragraph, classify_sentence, shift
 
 _EXPECTATION = tomllib.loads(
     (Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "synthetic"
@@ -128,8 +128,8 @@ def test_noun_with_zu_is_not_a_requirement():
     as duties and turn a table caption into an obligation.
     """
     for sentence in ("Das Zubehör und die Zuleitung sind im Anhang aufgeführt.",
-                     "Die Kurzunterbrechungen und die Bezugsspannungen sind in Tabelle 3 "
-                     "angegeben.",
+                     ("Die Kurzunterbrechungen und die Bezugsspannungen sind in "
+                      "Tabelle 3 angegeben."),
                      "Die Anzugsmomente sind dem Datenblatt beigefügt."):
         assert classify_sentence(sentence) == "informativ", sentence
 
