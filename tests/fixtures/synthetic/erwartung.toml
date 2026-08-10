@@ -1,0 +1,267 @@
+# Erwartete Mechanik des synthetischen Korpus TR-X 1000
+#
+# In Cowork verfasst. Diese Datei ist die Sollvorgabe: sie sagt, welche strukturelle
+# Operation und welche normative Wirkung jede Kapitelzuordnung tragen MUSS.
+#
+# Regeln:
+#   - Ein Nachtlauf ändert diese Datei nicht. Weicht das Ergebnis ab, ist das ein
+#     Befund für den Bericht.
+#   - "operation" folgt Achse A aus ENT-01, "richtung" Achse C, "komponente" Achse D.
+#   - "richtung" ist hier bewusst schon vergeben, obwohl die Vier-Achsen-Taxonomie erst
+#     in AP-06 implementiert wird. Der Korpus soll dann ohne Nacharbeit weiterverwendbar
+#     sein.
+
+[korpus]
+titel = "TR-X 1000 — Technische Regel für Prüfeinrichtungen an Musteranlagen"
+alt = "2020-01"
+neu = "2026-01"
+herkunft = "vollständig erfunden, kein Text aus einer realen Norm"
+
+# --------------------------------------------------------------------------
+# unverändert — Kontrollfälle. Hier darf nichts gemeldet werden.
+# --------------------------------------------------------------------------
+
+[[zuordnung]]
+alt = "1"
+neu = "1"
+operation = "unveraendert"
+richtung = "keine"
+zweck = "Kontrollarm: identischer Text muss geräuschlos durchlaufen"
+
+[[zuordnung]]
+alt = "7"
+neu = "7"
+operation = "unveraendert"
+richtung = "keine"
+zweck = "zweiter Kontrollarm, weiter hinten im Dokument"
+
+[[zuordnung]]
+alt = "9.1"
+neu = "9.1"
+operation = "unveraendert"
+richtung = "keine"
+zweck = "unverändertes Unterkapitel unter einem Kapitel, das sich strukturell ändert"
+
+# --------------------------------------------------------------------------
+# Geltungsbereich und Modalität
+# --------------------------------------------------------------------------
+
+[[zuordnung]]
+alt = "2"
+neu = "2"
+operation = "geaendert"
+richtung = "verschaerfend"
+komponente = ["geltungsbereich"]
+zweck = "Definition eingeschränkt: 'unabhängig von ihrer Bemessungsleistung' → 'mehr als 30 kW'"
+hinweis = """Die Einschränkung des Geltungsbereichs nimmt Anlagen unter 30 kW aus der
+Regel heraus. Für die verbleibenden ändert sich nichts. Ob das insgesamt als
+verschärfend gilt, hängt am Adressaten — genau der Fall, für den ENT-22 die
+adressatenbezogene Achse C verlangt."""
+
+[[zuordnung]]
+alt = "3"
+neu = "3"
+operation = "geaendert"
+richtung = "verschaerfend"
+komponente = ["modalitaet"]
+zweck = "'sollte gesichert sein' → 'muss gesichert sein': Empfehlung wird Anforderung"
+
+# --------------------------------------------------------------------------
+# Schwellwert, Ausnahme, Umnummerierung, Einfügung
+# --------------------------------------------------------------------------
+
+[[zuordnung]]
+alt = "4.1"
+neu = "4.1"
+operation = "geaendert"
+richtung = "gemischt"
+komponente = ["haeufigkeit", "ausnahme"]
+zweck = "'jährlich' → 'halbjährlich' verschärft; die neue Ausnahme für Tabelle 2 lockert für eine Teilmenge"
+hinweis = """Der wichtigste Einzelfall des Korpus. Eine flache Taxonomie muss sich hier
+für eine Richtung entscheiden und liegt damit für die jeweils andere Teilmenge falsch.
+Erwartet wird 'gemischt', nicht 'verschaerfend'."""
+
+[[zuordnung]]
+neu = "4.2"
+operation = "hinzugefuegt"
+richtung = "neue_anforderung"
+komponente = ["haeufigkeit", "vorbedingung"]
+zweck = "neues Unterkapitel mit eigener Frist bei mehr als 500 Schaltspielen"
+
+[[zuordnung]]
+alt = "4.2"
+neu = "4.3"
+operation = "umnummeriert"
+richtung = "keine"
+zweck = "identischer Text, verschobene Nummer durch die Einfügung von 4.2"
+hinweis = """Der Kernfall für das Alignment: gleicher Wortlaut, andere Nummer. Eine
+Zuordnung über die Nummer allein ordnet hier alt 4.2 dem neuen 4.2 zu und damit dem
+falschen Kapitel."""
+
+[[zuordnung]]
+alt = "5"
+neu = "5"
+operation = "geaendert"
+richtung = "verschaerfend"
+komponente = ["schwellwert"]
+zweck = "5 % → 2 %; zugleich entfällt die Sonderregel für Tabelle 2, weil 2 % nun allgemein gilt"
+
+# --------------------------------------------------------------------------
+# Zusammenlegung und Verschiebung
+# --------------------------------------------------------------------------
+
+[[zuordnung]]
+alt = ["6.1", "6.2"]
+neu = "6"
+operation = "zusammengefuehrt"
+richtung = "keine"
+komponente = []
+zweck = "zwei Unterkapitel werden zu einem Kapitel ohne Untergliederung; Inhalt unverändert"
+hinweis = "n:1. Ein Modell, das nur 1:1 kann, muss hier eine der beiden Quellen verlieren."
+
+[[zuordnung]]
+alt = "10"
+neu = "9.2"
+operation = "verschoben"
+richtung = "keine"
+zweck = "Übergangsbestimmungen wandern von der obersten Ebene unter Kapitel 9"
+hinweis = "Verschiebung über Ebenengrenzen hinweg, Wortlaut identisch."
+
+# --------------------------------------------------------------------------
+# Listenvererbung, Entfall, Neuaufnahme
+# --------------------------------------------------------------------------
+
+[[zuordnung]]
+alt = "8"
+neu = "8"
+operation = "geaendert"
+richtung = "verschaerfend"
+komponente = ["nachweispflicht"]
+zweck = "vierter Listenpunkt ergänzt: Ergebnis der vorangegangenen Prüfung"
+hinweis = """Prüft die Listenvererbung: die Pflicht steht im Einleitungssatz
+('hat sicherzustellen'), die Listenpunkte tragen sie nur mit. Ein satzweiser
+Klassifikator hält den neuen Listenpunkt für informativ."""
+
+[[zuordnung]]
+alt = "11"
+operation = "entfallen"
+richtung = "entfallene_anforderung"
+komponente = ["nachweispflicht"]
+zweck = "Meldepflicht bei Störungen ersatzlos gestrichen"
+
+[[zuordnung]]
+neu = "10"
+operation = "hinzugefuegt"
+richtung = "neue_anforderung"
+komponente = ["nachweispflicht", "adressat"]
+zweck = "Fernauslesung neu eingeführt"
+
+# --------------------------------------------------------------------------
+# Sprachliche Konstruktionen, die der Modalitätserkennung Schwierigkeiten machen
+# --------------------------------------------------------------------------
+# Belege für AP-05 (ENT-22). Jede Zeile nennt eine Fundstelle im Korpus und die
+# Modalität, die dort erkannt werden MUSS.
+
+[[modalitaet]]
+fundstelle = "4.1 alt und neu"
+text = "ist jährlich zu kalibrieren"
+konstruktion = "synthetischer Modalinfinitiv"
+erwartet = "anforderung"
+hinweis = "Wird heute als 'informativ' klassifiziert — der 9,8-%-Befund aus AP-00."
+
+[[modalitaet]]
+fundstelle = "4.3 neu"
+text = "ist ein Nachweis zu führen"
+konstruktion = "synthetischer Modalinfinitiv"
+erwartet = "anforderung"
+
+[[modalitaet]]
+fundstelle = "6 neu"
+text = "ist zehn Jahre aufzubewahren"
+konstruktion = "synthetischer Modalinfinitiv"
+erwartet = "anforderung"
+
+[[modalitaet]]
+fundstelle = "8 alt und neu"
+text = "hat sicherzustellen"
+konstruktion = "haben + zu, synthetisch"
+erwartet = "anforderung"
+
+[[modalitaet]]
+fundstelle = "3 alt"
+text = "sollte gesichert sein"
+konstruktion = "Modalverb, Empfehlung"
+erwartet = "empfehlung"
+
+[[modalitaet]]
+fundstelle = "3 neu"
+text = "muss gesichert sein"
+konstruktion = "Modalverb, Anforderung"
+erwartet = "anforderung"
+
+[[modalitaet]]
+fundstelle = "5 alt und neu"
+text = "darf 5 % nicht überschreiten"
+konstruktion = "dürfen + Negation"
+erwartet = "verbot"
+hinweis = "Muss von 'muss nicht' unterschieden werden — Verbot, nicht Wegfall einer Pflicht."
+
+[[modalitaet]]
+fundstelle = "10 alt / 9.2 neu"
+text = "dürfen weiterbetrieben werden"
+konstruktion = "dürfen ohne Negation"
+erwartet = "zulaessigkeit"
+
+[[modalitaet]]
+fundstelle = "3 alt und neu"
+text = "stellt sicher, dass"
+konstruktion = "Indikativ mit Pflichtcharakter"
+erwartet = "anforderung"
+hinweis = "Implizite Pflicht ohne Modalverb und ohne Infinitivkonstruktion. Der schwerste Fall."
+
+[[modalitaet]]
+fundstelle = "9.1 alt und neu"
+text = "richtet sich nach den Angaben des Herstellers"
+konstruktion = "Indikativ, deskriptiv"
+erwartet = "informativ"
+hinweis = "Gegenprobe zum vorigen Fall: Indikativ ohne Pflichtcharakter."
+
+# --------------------------------------------------------------------------
+# Belegprüfung
+# --------------------------------------------------------------------------
+
+[[evidenz]]
+fall = "zitat_mit_auslassung"
+kapitel = "4.1"
+zitat = "Die Prüfeinrichtung ist halbjährlich zu kalibrieren. … diese sind jährlich zu kalibrieren."
+erwartet_ok = true
+erwartet_strict = true
+erwartet_fragmente = 2
+zweck = "ENT-19: beide Fragmente sind im Quelltext vorhanden"
+
+[[evidenz]]
+fall = "zitat_mit_auslassung_fragment_fehlt"
+kapitel = "4.1"
+zitat = "Die Prüfeinrichtung ist halbjährlich zu kalibrieren. … diese sind monatlich zu kalibrieren."
+erwartet_ok = true
+erwartet_strict = false
+erwartet_fragmente = 2
+zweck = "erstes Fragment belegt, zweites erfunden — die Altregel lässt das durch"
+
+[[evidenz]]
+fall = "praefix_genuegt_der_altregel"
+kapitel = "5"
+zitat = "Die Messabweichung darf 2 % des Messbereichsendwerts nicht unterschreiten."
+erwartet_ok = true
+erwartet_strict = false
+zweck = """Die ersten 15 Zeichen ('die messabweichu') stehen im Quelltext, der Satz
+kippt aber am Ende die Aussage ins Gegenteil. Der Kernfall aus F-1."""
+
+[[evidenz]]
+fall = "nicht_eindeutig"
+kapitel = "4.1"
+zitat = "zu kalibrieren"
+erwartet_ok = false
+erwartet_unique = false
+zweck = """Kommt in 4.1 mehrfach und in 4.2 erneut vor. Beleg für ENT-30: vollständig
+belegt, aber nicht lokalisierbar."""
