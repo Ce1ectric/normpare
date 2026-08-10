@@ -1,0 +1,67 @@
+{
+ "artifacts": {
+  "alt/norm_doc.json": {
+   "bytes": 17057,
+   "sha256": "b59fbb95137a937df1b20e35f8d1b406e0de4b604c710a11261c3532e2a35e36"
+  },
+  "chapters.json": {
+   "bytes": 21027,
+   "sha256": "75e4836fa5bfd99082ec8ca75d6e16dd785c6009659ef81e90f747c9e89575f5"
+  },
+  "keywords.json": {
+   "bytes": 726,
+   "sha256": "3e956a9e45e75cb7776a413034635299859c23aa4ac41a69c20ba2f200b75a76"
+  },
+  "mapping.json": {
+   "bytes": 8051,
+   "sha256": "a46caf1965b0abf45661a3e02c6febdbcd060f44026ddae26faf08b9becd69af"
+  },
+  "neu/norm_doc.json": {
+   "bytes": 16888,
+   "sha256": "bfcd2624149235fc9e93335c4d272b3399799d0101f6ff1284dc6e4bc3a5dbb9"
+  },
+  "statistics.json": {
+   "bytes": 1026,
+   "sha256": "c2ea9d321fd19d29883f7a2d8cdb8f75396c6a8c8f6ddf24085e46c88cc2c94a"
+  },
+  "synopse.json": {
+   "bytes": 17125,
+   "sha256": "8924844e6278240452b19e3d98b0002320bcbe0a3c80d504c7af1fc2f22bc8c0"
+  }
+ },
+ "created": "2026-08-10T18:39:01Z",
+ "name": "synthetic",
+ "normpare_version": "0.1.1",
+ "reference_dir": "baselines/synthetic",
+ "schema": 1,
+ "snapshot": {
+  "norm_alt": {
+   "figures": 0,
+   "paragraphs": 22,
+   "sections": 17,
+   "tables": 0
+  },
+  "norm_neu": {
+   "figures": 0,
+   "paragraphs": 21,
+   "sections": 16,
+   "tables": 0
+  },
+  "present": {
+   "deutung": false,
+   "norm_alt": true,
+   "norm_neu": true,
+   "synopse": true
+  },
+  "synopse": {
+   "change_kinds": {
+    "new": 3,
+    "removed": 2,
+    "similar": 5
+   },
+   "n_chapters": 15,
+   "tables_fragment": 0,
+   "tables_real": 0
+  }
+ }
+}

@@ -202,6 +202,31 @@ def test_baseline_round_trip(tmp_path):
     assert regression.read_baseline(path) == built
 
 
+def test_reference_dir_stays_relative_inside_the_repository(tmp_path, monkeypatch):
+    """A baseline that is tracked must not carry an absolute local path.
+
+    ``baselines/synthetic.json`` goes into the repository (ENT-27), so its
+    ``reference_dir`` has to mean the same thing on every machine. Outside the
+    repository the absolute path is kept -- there is nothing to be relative to.
+    """
+    monkeypatch.setattr(regression, "ROOT", tmp_path)
+    inside = regression.build_baseline(make_run(tmp_path / "baselines" / "synthetic"))
+    assert inside["reference_dir"] == "baselines/synthetic"
+
+    outside = regression.build_baseline(make_run(tmp_path.parent / "elsewhere" / "run"))
+    assert Path(outside["reference_dir"]).is_absolute()
+
+
+def test_check_resolves_a_relative_reference_dir(tmp_path, monkeypatch, capsys):
+    """A relative ``reference_dir`` is read relative to the repository root."""
+    monkeypatch.setattr(regression, "ROOT", tmp_path)
+    ref = make_run(tmp_path / "baselines" / "synthetic")
+    path = _baseline_for(ref, tmp_path / "baselines" / "synthetic.json")
+    assert regression.read_baseline(path)["reference_dir"] == "baselines/synthetic"
+    assert regression.check(ref, path) == 0
+    assert "OK" in capsys.readouterr().out
+
+
 def test_known_deviation_with_matching_hash_is_not_a_regression(tmp_path, capsys):
     ref = make_run(tmp_path / "ref")
     baseline = _baseline_for(ref, tmp_path / "baselines" / "run.json")

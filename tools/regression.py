@@ -214,6 +214,20 @@ def _flatten(d: dict, prefix: str = "") -> dict:
 
 # -- baseline --------------------------------------------------------------------------
 
+def _reference_dir(out: Path) -> str:
+    """Repository-relative path if the run lives inside the tree, absolute otherwise.
+
+    ``baselines/synthetic.json`` is tracked (ENT-27), so its reference must mean the
+    same thing on every machine -- an absolute ``/Users/...`` would be noise in the
+    repository and useless in CI.
+    """
+    resolved = Path(out).resolve()
+    try:
+        return resolved.relative_to(Path(ROOT).resolve()).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
 def build_baseline(out_dir, name: str | None = None) -> dict:
     """Build a baseline from an existing output directory (artifacts stay where they are)."""
     out = Path(out_dir)
@@ -221,7 +235,7 @@ def build_baseline(out_dir, name: str | None = None) -> dict:
         "schema": SCHEMA,
         "name": name or out.name,
         "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "reference_dir": str(out.resolve()),
+        "reference_dir": _reference_dir(out),
         "normpare_version": _version(),
         "artifacts": artifact_digests(out),
         "snapshot": snapshot(out),
@@ -347,6 +361,8 @@ def check(out_dir, baseline_path, explain: bool = False) -> int:
     cur_art = artifact_digests(out)
     base_art = base.get("artifacts") or {}
     ref_dir = Path(base.get("reference_dir", ""))
+    if not ref_dir.is_absolute():          # written relative to the repository root
+        ref_dir = Path(ROOT) / ref_dir
     missing, differing, added, accepted, resolved = [], [], [], [], []
     for art in sorted(set(base_art) | set(cur_art)):
         a, b = base_art.get(art), cur_art.get(art)
