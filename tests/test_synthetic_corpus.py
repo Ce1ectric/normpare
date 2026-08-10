@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 import tomllib
 
+from normpare.text.textnorm import compare_key
+
 _EXPECTATION = tomllib.loads(
     (Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "synthetic"
      / "erwartung.toml").read_text(encoding="utf-8"))
@@ -147,3 +149,62 @@ def test_added_chapters_are_reported(sec_id, request, expectation, synthetic_run
     assert rec is not None, f"new chapter {sec_id} appears in no record"
     assert rec["match_type"] == "new" and rec.get("old_id") is None, \
         f"new chapter {sec_id} is not reported as added but as {rec['match_type']}"
+
+
+# -- 13..15: the paragraph level ------------------------------------------------------------
+# Section ``[[absatz]]`` of the specification. The chapter-level expectations above pass
+# while a sentence that survived verbatim is still reported as dropped -- the mapping is
+# right, the paragraph alignment is not.
+
+def _removed_changes(synopse: dict) -> list[tuple[dict, dict]]:
+    return [(ch, c) for ch in synopse["chapters"] for c in ch["changes"]
+            if c["kind"] == "removed"]
+
+
+def test_merged_paragraph_is_not_reported_as_removed(expectation, synthetic_run):
+    """The sentence stands verbatim in the new edition, so it must not be reported gone.
+
+    Old 6.2 is a paragraph of its own; in the new edition the same sentence is the second
+    sentence of a paragraph whose first sentence was already paired with old 6.1 (2:1
+    merge). Claiming its removal asserts the end of a duty that still stands.
+    """
+    spec = expectation["absatz"][0]
+    assert spec["fall"] == "verschmelzung_2_zu_1" and spec["erwartet"] == "unveraendert"
+    wanted = compare_key(spec["satz"])
+    offenders = [f"{ch.get('new_id') or ch.get('old_id')}: {c['old_ids']}"
+                 for ch, c in _removed_changes(synthetic_run.synopse)
+                 if wanted in compare_key(c.get("old_text") or "")]
+    assert offenders == [], \
+        f"{spec['satz']!r} is present in the new edition but reported as removed in {offenders}"
+
+
+def test_merged_paragraph_keeps_both_sources(expectation, synthetic_run):
+    """The new paragraph of chapter 6 carries both old paragraphs -- n:1 in ``para_links``.
+
+    ``old_ids`` is a list, so the data model can express it (AP-00 F-3); what was missing
+    is a pass that produces it.
+    """
+    spec = expectation["absatz"][0]
+    wanted = compare_key(spec["satz"])
+    host = next((p for s in synthetic_run.new_doc["sections"] if s["id"] == spec["neu"]
+                 for p in s["paragraphs"]
+                 if wanted in compare_key(p.get("n1") or p.get("n0") or "")), None)
+    assert host is not None, f"new chapter {spec['neu']} does not contain the sentence at all"
+
+    rec = _record_by_new(synthetic_run.mapping, spec["neu"])
+    links = [l for l in rec.get("para_links") or [] if host["id"] in l["new_ids"]]
+    assert len(links) == 1, f"the host paragraph appears in {len(links)} links, expected one"
+    sources = set(links[0]["old_ids"])
+    assert len(sources) >= 2, \
+        (f"the merged paragraph {host['id']} carries only {sorted(sources)}; both old "
+         f"paragraphs of {spec['alt']} flow into it")
+
+
+def test_control_chapters_report_no_removals(expectation, synthetic_run):
+    """The control arms (1, 7, 9.1) are identical in both editions -- nothing was dropped."""
+    unchanged = [z["alt"] for z in _expected(expectation, "unveraendert")]
+    for sec_id in unchanged:
+        ch = _chapter(synthetic_run.synopse, old_id=sec_id) or {}
+        removed = [c.get("old_text") for c in ch.get("changes") or []
+                   if c["kind"] == "removed"]
+        assert removed == [], f"control chapter {sec_id} reports {removed} as removed"

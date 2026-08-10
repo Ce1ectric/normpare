@@ -30,9 +30,13 @@ SCHEMA_VERSION = 2
 
 
 def file_digest(path) -> dict:
-    """``{path, sha256, bytes}`` of an input file; hash and size are ``None`` if absent."""
+    """``{path, sha256, bytes}`` of an input file; hash and size are ``None`` if absent.
+
+    Absent covers anything that is not a readable file -- a replay run has no sources at
+    all and carries an empty path, which resolves to the current *directory*.
+    """
     p = Path(path)
-    if not p.exists():
+    if not p.is_file():
         return {"path": str(p), "sha256": None, "bytes": None}
     h = hashlib.sha256()
     with open(p, "rb") as fh:

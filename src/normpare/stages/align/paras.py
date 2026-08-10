@@ -7,6 +7,8 @@ Per chapter pair:
   2  similarity: Hungarian over sim_backend, threshold tau (PDF source: tau-0.05)
   3  split: one old paragraph <-> 2-3 consecutive new (concatenation of similar ones)
      merge: 2-3 old <-> one new
+  3b absorbed: a leftover old paragraph whose text is contained in an already paired
+     new paragraph joins that link (n:1, kind "merged") -- containment, no threshold
 Document-wide:
   4  moved: remaining new x removed globally against each other (threshold tau_moved) ->
      instead of "new"+"removed", a moved link with source/target chapter.
@@ -28,6 +30,13 @@ def _lsa(cost):
 # kind 'formula' deliberately NOT in the text comparison: formulas go through the
 # per-chapter formula diff (diffs.formulas_diff), not paragraph alignment
 _COMPARE_KINDS = {"text", "list", "note", "term"}
+
+# Link kinds a leftover old paragraph may be absorbed into (pass 3b). All of them pair
+# exactly one new paragraph, so the absorbed text really lands in that paragraph.
+_ABSORBING_KINDS = {"identical", "similar", "merged"}
+#: Minimum compare_key length for an absorption. compare_key drops all spaces, so a
+#: shorter span ("Allgemeines") is contained in many paragraphs by chance.
+MIN_ABSORB_KEY = 20
 
 
 def _paras(sec) -> list[dict]:
@@ -136,6 +145,31 @@ def align_chapter(old_paras, new_paras, sim_backend, tau: float):
             links.append({"o": grp, "n": [j], "kind": "merged", "conf": round(s, 3)})
             used_o.update(grp)
             used_n.add(j)
+
+    # ---- 3b) absorbed: an old paragraph taken up by an already paired new one ------
+    # A 2:1 merge that pass 3 cannot see: its window needs two *free* neighbouring old
+    # paragraphs, but the first one is already paired by similarity, so no window exists
+    # and the second one falls through to "removed" -- a claim that a passage is gone
+    # while it stands verbatim in the new edition. Recognised structurally, by
+    # containment, never by lowering a threshold: the old text IS a part of the new one.
+    paired = {l["n"][0]: l for l in links
+              if len(l["n"]) == 1 and l["o"] and l["kind"] in _ABSORBING_KINDS}
+    if paired:
+        host_keys = {j: compare_key(_txt(new_paras[j])) for j in paired}
+        for i in range(len(old_paras)):
+            if i in used_o:
+                continue
+            key = compare_key(_txt(old_paras[i]))
+            if len(key) < MIN_ABSORB_KEY:
+                continue                   # too short: contained anywhere by chance
+            host = next((j for j in sorted(paired)
+                         if key != host_keys[j] and key in host_keys[j]), None)
+            if host is None:
+                continue
+            link = paired[host]
+            link["o"] = sorted(link["o"] + [i])
+            link["kind"] = "merged"
+            used_o.add(i)
 
     # ---- remainder --------------------------------------------------------------
     for j in range(len(new_paras)):
