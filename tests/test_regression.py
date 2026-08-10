@@ -7,14 +7,15 @@ from __future__ import annotations
 
 import builtins
 import hashlib
+import importlib.util
 import json
 import pathlib
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-
-import regression  # noqa: E402
+_SPEC = importlib.util.spec_from_file_location(
+    "regression", Path(__file__).resolve().parents[1] / "tools" / "regression.py")
+regression = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(regression)
 
 
 # -- miniature run directories ---------------------------------------------------------
