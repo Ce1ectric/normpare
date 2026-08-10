@@ -350,7 +350,9 @@ def check(out_dir, baseline_path, explain: bool = False) -> int:
                 accepted.append((art, entry))
             else:
                 differing.append((art, a, b, entry))
-        elif entry:
+        elif entry and out.resolve() != ref_dir.resolve():
+            # equality with the reference is only news for a *run*; the reference
+            # directory itself trivially equals itself
             resolved.append(art)
 
     cur_snap = _flatten(snapshot(out))
