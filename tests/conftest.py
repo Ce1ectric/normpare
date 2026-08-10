@@ -14,11 +14,11 @@ import importlib.util
 import json
 import socket
 import sys
-import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 SYNTHETIC = ROOT / "tests" / "fixtures" / "synthetic"

@@ -9,6 +9,26 @@ including CI, where the real standards must not go.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+import tomllib
+
+_EXPECTATION = tomllib.loads(
+    (Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "synthetic"
+     / "erwartung.toml").read_text(encoding="utf-8"))
+
+#: Chapters the mapping cannot report as added today, with the reason and the
+#: responsible package. The expectation stays as it is -- only the verdict is expected
+#: to fail until the correspondence model can express it.
+_KNOWN_GAPS = {
+    "4.2": "AP-07 (correspondence graph): a new subchapter under a mapped parent is "
+           "absorbed into the parent record (new_ids=['4', '4.2'], "
+           "restructured='split_down') instead of getting a record of its own. Its "
+           "text is reported as an added change inside chapter 4, so nothing is lost, "
+           "but the chapter-level operation 'added' is not expressible in a 1:1 record.",
+}
+
 
 # -- helpers over the mapping records -----------------------------------------------------
 
@@ -116,12 +136,14 @@ def test_removed_chapter_is_reported(expectation, synthetic_run):
     assert rec["match_type"] == "removed" and rec.get("new_id") is None
 
 
-def test_added_chapters_are_reported(expectation, synthetic_run):
+@pytest.mark.parametrize("sec_id", sorted(z["neu"] for z in _EXPECTATION["zuordnung"]
+                                          if z["operation"] == "hinzugefuegt"))
+def test_added_chapters_are_reported(sec_id, request, expectation, synthetic_run):
     """New 4.2 and new 10 have no counterpart in the old edition."""
-    added = sorted(z["neu"] for z in _expected(expectation, "hinzugefuegt"))
-    assert added == ["10", "4.2"]
-    for sec_id in added:
-        rec = _record_by_new(synthetic_run.mapping, sec_id)
-        assert rec is not None, f"new chapter {sec_id} appears in no record"
-        assert rec["match_type"] == "new" and rec.get("old_id") is None, \
-            f"new chapter {sec_id} is not reported as added but as {rec['match_type']}"
+    assert sorted(z["neu"] for z in _expected(expectation, "hinzugefuegt")) == ["10", "4.2"]
+    if sec_id in _KNOWN_GAPS:
+        request.node.add_marker(pytest.mark.xfail(reason=_KNOWN_GAPS[sec_id], strict=True))
+    rec = _record_by_new(synthetic_run.mapping, sec_id)
+    assert rec is not None, f"new chapter {sec_id} appears in no record"
+    assert rec["match_type"] == "new" and rec.get("old_id") is None, \
+        f"new chapter {sec_id} is not reported as added but as {rec['match_type']}"

@@ -88,7 +88,7 @@ def _prompt_for(synopse: dict, language: str = "de", title: str = "") -> tuple[s
     return build_system_prompt(language, title), user
 
 
-def _fixture_file(path, synopse: dict) -> "FixtureProvider":
+def _fixture_file(path, synopse: dict) -> FixtureProvider:
     system, user = _prompt_for(synopse)
     path.write_text(json.dumps({cache_key(MODEL, system, user): FROZEN_ANSWER},
                                ensure_ascii=False), encoding="utf-8")
@@ -115,7 +115,7 @@ def test_fixture_provider_raises_on_missing_key(tmp_path):
     path = tmp_path / "deutungen.json"
     path.write_text("{}", encoding="utf-8")
     provider = FixtureProvider(path)
-    system, user = _prompt_for(_synopse())
+    _system, user = _prompt_for(_synopse())
     key = cache_key(provider.model, provider.system, user)
     with pytest.raises(MissingFixtureError) as exc:
         provider.resolve([("1", user)])
