@@ -336,8 +336,8 @@ def render(result: dict, src: str, digest: str) -> str:
 
     for key in CONSTRUCTIONS:
         lines += ["", "=" * 92,
-                  f"{key} -- {result['counts'][key]} sentences, "
-                  f"classes: {_distribution(result['klassenverteilung'][key])}",
+                  (f"{key} -- {result['counts'][key]} sentences, "
+                   f"classes: {_distribution(result['klassenverteilung'][key])}"),
                   "=" * 92]
         pool = result["beispiele_informativ"][key] or result["beispiele"][key]
         note = ("twenty sentences the classifier calls informativ today"
