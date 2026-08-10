@@ -208,3 +208,46 @@ def test_control_chapters_report_no_removals(expectation, synthetic_run):
         removed = [c.get("old_text") for c in ch.get("changes") or []
                    if c["kind"] == "removed"]
         assert removed == [], f"control chapter {sec_id} reports {removed} as removed"
+
+
+# -- 16: modality ---------------------------------------------------------------------------
+
+def _contains_excerpt(text: str | None, excerpt: str) -> bool:
+    """True when the words of ``excerpt`` appear in ``text``, in order.
+
+    The excerpts in ``erwartung.toml`` name a construction ("muss gesichert sein"), not a
+    contiguous span -- the sentence carries other words between them.
+    """
+    hay, pos = compare_key(text or ""), 0
+    for token in excerpt.split():
+        needle = compare_key(token)
+        found = hay.find(needle, pos)
+        if found < 0:
+            return False
+        pos = found + len(needle)
+    return True
+
+
+def test_modality_change_is_detected(expectation, synthetic_run):
+    """Chapter 3 turns a recommendation into a requirement -- the change stream must say so.
+
+    ``sollte gesichert sein`` -> ``muss gesichert sein`` is the one modality shift the
+    corpus contains as a pair; both sides are listed in ``[[modalitaet]]``.
+    """
+    old_text = next(m["text"] for m in expectation["modalitaet"]
+                    if m["fundstelle"] == "3 alt")
+    new_text = next(m["text"] for m in expectation["modalitaet"]
+                    if m["fundstelle"] == "3 neu")
+
+    ch = _chapter(synthetic_run.synopse, new_id="3")
+    assert ch is not None, "chapter 3 has no entry in the synopsis"
+    hits = [c for c in ch.get("changes") or []
+            if _contains_excerpt(c.get("new_text"), new_text)]
+    assert len(hits) == 1, \
+        f"{new_text!r} appears in {len(hits)} changes of chapter 3, expected one"
+
+    change = hits[0]
+    assert _contains_excerpt(change.get("old_text"), old_text), \
+        "the change does not carry the old wording it replaces"
+    assert (change.get("modality") or {}) == {"old": "sollte", "new": "muss",
+                                              "shift": "verschaerft"}
