@@ -12,6 +12,8 @@ import json
 import pathlib
 from pathlib import Path
 
+import pytest
+
 _SPEC = importlib.util.spec_from_file_location(
     "regression", Path(__file__).resolve().parents[1] / "tools" / "regression.py")
 regression = importlib.util.module_from_spec(_SPEC)
@@ -81,6 +83,35 @@ def make_run(out_dir: Path, *, evidence_ok: int = 2, skip: tuple[str, ...] = ())
 def _baseline_for(run: Path, baseline_path: Path) -> Path:
     regression.write_baseline(regression.build_baseline(run), baseline_path)
     return baseline_path
+
+
+def _run_with_changed_chapters(out_dir: Path) -> Path:
+    """A run whose ``chapters.json`` deviates from the reference (as in AP-01).
+
+    ``chapters.json`` is not part of the metric snapshot, so the only difference is
+    the byte comparison.
+    """
+    run = make_run(out_dir)
+    text = (run / "chapters.json").read_text(encoding="utf-8")
+    (run / "chapters.json").write_text(text.replace("Scope", "Umfang"), encoding="utf-8")
+    return run
+
+
+def _add_known_deviation(baseline_path: Path, artifact: str, expected_sha: str,
+                         drop: str | None = None) -> None:
+    """Add a ``known_deviations`` entry to an existing baseline (see ENT-25)."""
+    base = regression.read_baseline(baseline_path)
+    entry = {
+        "expected_sha256": expected_sha,
+        "reference_sha256": base["artifacts"][artifact]["sha256"],
+        "grund": "documented deviation, created by the test",
+        "belegt_durch": "tests/test_regression.py",
+        "aufgenommen": "2026-08-10",
+    }
+    if drop:
+        entry.pop(drop)
+    base.setdefault("known_deviations", {})[artifact] = entry
+    regression.write_baseline(base, baseline_path)
 
 
 # -- 1..10 ------------------------------------------------------------------------------
@@ -169,6 +200,55 @@ def test_baseline_round_trip(tmp_path):
     path = tmp_path / "baselines" / "run.json"
     regression.write_baseline(built, path)
     assert regression.read_baseline(path) == built
+
+
+def test_known_deviation_with_matching_hash_is_not_a_regression(tmp_path, capsys):
+    ref = make_run(tmp_path / "ref")
+    baseline = _baseline_for(ref, tmp_path / "baselines" / "run.json")
+    run = _run_with_changed_chapters(tmp_path / "run")
+    _add_known_deviation(baseline, "chapters.json",
+                         regression.sha256_file(run / "chapters.json"))
+    rc = regression.check(run, baseline)
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "known deviation" in out.lower()
+    assert "REGRESSION" not in out
+
+
+def test_known_deviation_with_changed_hash_is_a_regression(tmp_path, capsys):
+    ref = make_run(tmp_path / "ref")
+    baseline = _baseline_for(ref, tmp_path / "baselines" / "run.json")
+    run = _run_with_changed_chapters(tmp_path / "run")
+    _add_known_deviation(baseline, "chapters.json", "0" * 64)
+    rc = regression.check(run, baseline)
+    out = capsys.readouterr().out
+    assert rc != 0
+    assert "chapters.json" in out
+    # the recorded exception must be named -- otherwise it is impossible to tell
+    # an unknown regression from one that no longer matches its documented hash
+    assert "known deviation" in out.lower()
+
+
+def test_known_deviation_without_reason_is_rejected(tmp_path):
+    ref = make_run(tmp_path / "ref")
+    baseline = _baseline_for(ref, tmp_path / "baselines" / "run.json")
+    run = _run_with_changed_chapters(tmp_path / "run")
+    _add_known_deviation(baseline, "chapters.json",
+                         regression.sha256_file(run / "chapters.json"), drop="grund")
+    with pytest.raises(regression.BaselineError):
+        regression.check(run, baseline)
+
+
+def test_resolved_deviation_is_reported(tmp_path, capsys):
+    ref = make_run(tmp_path / "ref")
+    baseline = _baseline_for(ref, tmp_path / "baselines" / "run.json")
+    run = make_run(tmp_path / "run")            # identical to the reference again
+    _add_known_deviation(baseline, "chapters.json", "0" * 64)
+    rc = regression.check(run, baseline)
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "chapters.json" in out
+    assert "can be removed" in out.lower()
 
 
 def test_harness_schreibt_nicht_nach_out(tmp_path, monkeypatch):
