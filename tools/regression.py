@@ -84,10 +84,15 @@ def _load(p: Path):
 
 
 def _version() -> str:
+    """Version of the *source tree*, not of the installed distribution."""
     try:
-        return version("normpare")
-    except PackageNotFoundError:  # pragma: no cover - depends on the installation
-        return "unknown"
+        from normpare import __version__
+        return __version__
+    except ImportError:  # pragma: no cover - depends on the installation
+        try:
+            return version("normpare")
+        except PackageNotFoundError:
+            return "unknown"
 
 
 # -- part 1: byte-exact artifacts ------------------------------------------------------
