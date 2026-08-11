@@ -143,6 +143,91 @@ def test_subordinate_clause_does_not_trigger():
         assert classify_sentence(sentence) == "informativ", sentence
 
 
+# -- permission frames (AP-05a) ------------------------------------------------------------
+
+#: Case 18 of ``runs/AP-05_2026-08-10/stichprobe_neu_klassifiziert.txt``, word for word --
+#: the one false positive the sample turned up (neu 10.2.5.1 / p3).
+CASE_18 = ("Für die Bestimmung von Pmax und Pmin ist es zudem zulässig, anstelle eines "
+           "10-Sekunden-Intervalls auch kürzere Mittelungszeiträume heranzuziehen.")
+
+
+def test_permission_frame_is_not_a_requirement():
+    """``ist es zulässig, ... heranzuziehen`` permits; it does not oblige.
+
+    Grammatically this is not a modal infinitive of necessity but a predicative with a
+    ``zu`` infinitive as its complement. Reading it as a duty turns a permission into an
+    obligation -- the worst direction an error in this classifier can take.
+    """
+    assert classify_sentence(CASE_18) != "muss"
+    assert modality.deontic(CASE_18)["deontic_class"] != "anforderung"
+
+
+def test_all_permission_predicates_are_excluded():
+    """Every predicate of the closed list, one by one, in the same frame."""
+    for predicate in ("zulässig", "möglich", "erlaubt", "gestattet", "statthaft",
+                      "freigestellt", "optional", "nicht erforderlich", "nicht notwendig",
+                      "nicht zwingend"):
+        sentence = (f"Für die Bestimmung der Kennwerte ist es {predicate}, kürzere "
+                    f"Mittelungszeiträume heranzuziehen.")
+        assert classify_sentence(sentence) != "muss", sentence
+        assert modality.deontic(sentence)["deontic_class"] != "anforderung", sentence
+
+
+def test_adverb_between_ist_and_infinitive_stays_a_requirement():
+    """An adverb in the frame does not make a permission -- the predicate does.
+
+    "ist sorgfältig durchzuführen" has the same shape as "ist es zulässig ... heranzu-
+    ziehen" and is a duty. This is why the exclusion is a list of predicates and not the
+    structural rule "adjective between ``ist`` and the infinitive".
+    """
+    assert classify_sentence("Die Prüfung ist sorgfältig durchzuführen.") == "muss"
+    assert classify_sentence("Die Messung ist unverzüglich zu wiederholen.") == "muss"
+
+
+def test_adjective_attribute_stays_a_requirement():
+    """An adjective inside the object phrase must not reach the frame either."""
+    assert classify_sentence(
+        "Vor der Inbetriebnahme ist die vollständige Dokumentation vorzulegen.") == "muss"
+
+
+def test_permission_predicate_elsewhere_does_not_disable():
+    """``zulässig`` outside the frame keeps the duty -- attributive, not predicative.
+
+    The one place where an exclusion that is too coarse goes wrong: the same word, a
+    different position in the sentence, a different job.
+    """
+    assert classify_sentence("Die zulässige Abweichung ist einzuhalten.") == "muss"
+    assert classify_sentence(
+        "Die maximal zulässigen Werte sind dem Netzbetreiber nachzuweisen.") == "muss"
+
+
+def test_steht_es_frei_is_not_a_requirement():
+    """The fixed phrase ``steht ... frei`` governs the infinitive itself."""
+    free = ("Sofern die Voraussetzungen erfüllt sind, steht es dem Betreiber frei, ein "
+            "anderes Verfahren anzuwenden.")
+    assert classify_sentence(free) != "muss"
+    assert modality.deontic(free)["deontic_class"] != "anforderung"
+    assert classify_sentence(
+        "Es steht dem Betreiber frei, ein anderes Verfahren anzuwenden.") != "muss"
+
+
+def test_negated_requirement_predicates():
+    """A duty that is expressly not required does not become one through its infinitive."""
+    waived = "Es ist nicht erforderlich, die Unterlagen vorzulegen."
+    d = modality.deontic(waived)
+    assert d["deontic_class"] != "anforderung"
+    assert modality.RANK[d["label"]] < modality.RANK["muss"]
+    for sentence in ("Es ist nicht notwendig, die Unterlagen vorzulegen.",
+                     "Es ist nicht zwingend, die Unterlagen vorzulegen."):
+        assert classify_sentence(sentence) != "muss", sentence
+
+
+def test_case_18_from_the_sample():
+    """The sentence that triggered AP-05a, read as what it is: a permission."""
+    assert classify_sentence(CASE_18) == "darf"
+    assert modality.deontic(CASE_18)["deontic_class"] == "zulaessigkeit"
+
+
 # -- the corpus specification --------------------------------------------------------------
 
 #: Cases of ``erwartung.toml`` whose construction is out of scope for AP-05, with the
