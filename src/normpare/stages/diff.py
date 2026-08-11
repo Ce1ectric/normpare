@@ -16,6 +16,7 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from .align.sections import mapping_id
 from .enrich import modality, refs, values
 from ..text.textnorm import compare_key, garbage_ratio, n1, n2, n3
 
@@ -314,7 +315,8 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
         mt = rec["match_type"]
         old_ids = rec.get("old_ids") or ([rec["old_id"]] if rec.get("old_id") else [])
         new_ids = rec.get("new_ids") or ([rec["new_id"]] if rec.get("new_id") else [])
-        ch = {"old_id": rec.get("old_id"), "new_id": rec.get("new_id"),
+        ch = {"mapping_id": rec.get("mapping_id") or mapping_id(old_ids, new_ids),
+              "old_id": rec.get("old_id"), "new_id": rec.get("new_id"),
               "old_ids": old_ids, "new_ids": new_ids,
               "title": rec.get("new_title") or rec.get("old_title"),
               "level": rec.get("new_level") or rec.get("old_level"),
