@@ -42,12 +42,14 @@ import regression
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from normpare.stages.deutung import change_haystack, check_evidence
+from normpare.stages.deutung import change_haystack, change_index_check, check_evidence
 from normpare.text.textnorm import n2
 
-#: Keys of the five recomputed quantities, in report order.
+#: Keys of the recomputed quantities, in report order. The last two are the independent
+#: cross-check of the model's ``change_index`` (AP-07): the quote is scored against every
+#: change record of the chapter, not only the chosen one.
 METRICS = ("evidence_ok", "evidence_strict", "evidence_match_chars", "evidence_fragments",
-           "evidence_unique")
+           "evidence_unique", "change_index_best", "change_index_disputed")
 
 
 def _has_ellipsis(ev: str) -> bool:
@@ -76,8 +78,8 @@ def collect(out_dir) -> list[dict]:
             row = {"section_id": sid, "mapping_id": c.get("mapping_id"),
                    "change_index": d.get("change_index"),
                    "chapter_found": ch is not None}
-            row.update(check_evidence(d, ch) if ch is not None
-                       else dict.fromkeys(METRICS, None))
+            row.update({**check_evidence(d, ch), **change_index_check(d, ch)}
+                       if ch is not None else dict.fromkeys(METRICS, None))
             # the ellipsis-blind reading of "strict": the whole quote, ellipsis marks
             # included, occurs verbatim. This is what AP-00 measured (branch "full").
             row["evidence_contiguous"] = (ch is not None and bool(ev)
@@ -107,6 +109,7 @@ def summarize(rows: list[dict]) -> dict:
     only_ok = [r for r in checked if r["evidence_ok"] and not r["evidence_strict"]]
     only_strict = [r for r in checked if r["evidence_strict"] and not r["evidence_ok"]]
     ellipsis = [r for r in checked if r["has_ellipsis"]]
+    disputed = [r for r in checked if r["change_index_disputed"]]
     n = len(checked) or 1
     return {
         "interpretations": len(rows),
@@ -125,6 +128,13 @@ def summarize(rows: list[dict]) -> dict:
         "strict_not_unique": sum(1 for r in strict if not r["evidence_unique"]),
         "strict_not_unique_pct": round(
             100 * sum(1 for r in strict if not r["evidence_unique"]) / (len(strict) or 1), 2),
+        # AP-07: the quote fits another record of the chapter strictly better than the
+        # chosen one. Expected to be a real subset of "not unique" -- a unique quote
+        # cannot have a better candidate. If it is not, one of the two is miscomputed.
+        "change_index_disputed": len(disputed),
+        "change_index_disputed_pct": round(100 * len(disputed) / n, 2),
+        "disputed_and_unique": sum(1 for r in disputed if r["evidence_unique"]),
+        "disputed_not_strict": sum(1 for r in disputed if not r["evidence_strict"]),
         "evidence_contiguous": sum(1 for r in checked if r["evidence_contiguous"]),
         "evidence_contiguous_pct": round(
             100 * sum(1 for r in checked if r["evidence_contiguous"]) / n, 2),
@@ -186,6 +196,11 @@ def render(rows: list[dict], summary: dict, out_dir: Path, digests: dict) -> str
         (f"evidence_unique  {s['evidence_unique']:>6} / {s['evidence_strict']} strict hits"
          f"   ({s['strict_not_unique']} = {s['strict_not_unique_pct']} % also fit a "
          "foreign record of the same chapter -- ENT-30, a marker, not a gate)"),
+        (f"change_index_disputed {s['change_index_disputed']:>3} / {s['checked']} = "
+         f"{s['change_index_disputed_pct']} %   (another record of the chapter fits the "
+         "quote strictly better -- AP-07, flagged, never corrected)"),
+        (f"  of those unique: {s['disputed_and_unique']} (must be 0), "
+         f"not strict: {s['disputed_not_strict']} (must equal the line above)"),
         "",
         "evidence_match_chars over all checked interpretations:",
         _dist_line("characters covered", s["match_chars_all"]),

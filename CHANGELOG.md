@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Field ownership in the interpretation stage: every field the pipeline knows itself is
+  now set by the pipeline, and a value the model supplies for such a field is **discarded
+  and counted** instead of silently overwritten. The counts go into `pipeline_feedback`
+  under the phase `deutung`, one entry per chapter and field. Declared in
+  `PIPELINE_OWNED_CHAPTER`, `PIPELINE_OWNED_INTERPRETATION` and `PIPELINE_OWNED_ASSET`:
+  the key of an answer (`section_id`, `mapping_id`), the stage's own bookkeeping
+  (`_source`, `_changes_total`, `_changes_interpreted`) and every computed evidence
+  metric. Over the 4110 answers the model supplied exactly one of them, `section_id`, in
+  all 170 chapters — ten of which named a chapter that does not exist.
+- `change_index_best` and `change_index_disputed` on every interpretation: the quote is
+  scored against *every* change record of its chapter, not only against the one the model
+  chose. `change_index_best` names the strongest candidate, `change_index_disputed` says
+  it is strictly better than the chosen record. Which change an interpretation is about
+  stays the model's decision — it can be right for a reason text similarity cannot see —
+  so nothing is corrected: a disputed interpretation enters the review queue and a human
+  decides. A tie is no contradiction. Over the 4110 run 91 of 1387 interpretations
+  (6.6 %) are disputed, all of them among the 200 that were already not uniquely
+  localizable.
+- Every review-queue entry names its `review_reasons`: `contradiction_flag`,
+  `evidence_ok`, `change_index_disputed`. The existing triggers keep their meaning
+  exactly; the cross-check is an additional one, distinguishable from the evidence guard.
+- `tools/evidence_report.py` reports the cross-check as well (`change_index_disputed`,
+  and the two consistency checks against `evidence_unique`), so it can be measured over a
+  finished run without an LLM.
 - Every chapter mapping carries a `mapping_id`: both sides of the mapping, each sorted,
   written as `new<old` — `4.3<4.2` for a renumbering, `6<6.1+6.2` for a merge, `4+4.2<4`
   for a split, `10<` for an addition, `<11` for a removal. `cid = new_id or old_id` names

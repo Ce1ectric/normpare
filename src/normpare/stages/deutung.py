@@ -12,6 +12,7 @@ import json
 import os
 import re
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -114,6 +115,41 @@ ASSET_SCHEMA_DOC = """,
     "confidence": "high|medium|low"}
  ]
 }"""
+
+
+# ------------------------------------------------------------------ field ownership
+# Every field the pipeline knows itself is set by the pipeline (AP-07, ENT-51). A model
+# that invents a key produces an error nobody downstream can recognize as one -- it looks
+# like a missing chapter, which is how 165 interpretations of the 4110 run came to be
+# uncheckable. So a pipeline-owned value that arrives in an answer is discarded and
+# counted, never silently overwritten: the count is the only place that shows how often
+# the model supplies something it was never asked for.
+#
+# Only ``section_id`` is actually part of the schema; everything else the model can
+# supply unprompted alone. ``evidence_unique`` on a table or figure is the one value
+# that used to survive, because check_asset_evidence does not compute it.
+
+#: Pipeline-owned fields of a chapter answer.
+PIPELINE_OWNED_CHAPTER = ("section_id", "mapping_id", "_source",
+                          "_changes_total", "_changes_interpreted")
+
+#: Pipeline-owned fields of a single interpretation.
+PIPELINE_OWNED_INTERPRETATION = ("evidence_ok", "evidence_strict", "evidence_match_chars",
+                                 "evidence_fragments", "evidence_unique",
+                                 "change_index_best", "change_index_disputed")
+
+#: Pipeline-owned fields of a table or figure interpretation.
+PIPELINE_OWNED_ASSET = ("evidence_ok", "evidence_strict", "evidence_match_chars",
+                        "evidence_fragments", "evidence_unique")
+
+
+def drop_pipeline_owned(obj: dict, fields=PIPELINE_OWNED_INTERPRETATION) -> dict:
+    """Remove every pipeline-owned field from a model answer; return what was removed.
+
+    The return value is what makes the discarding visible -- see
+    :func:`run_deutung`, which turns it into ``pipeline_feedback`` entries.
+    """
+    return {f: obj.pop(f) for f in fields if f in obj}
 
 
 def label(value: str, language: str = "de") -> str:
@@ -738,6 +774,51 @@ def check_evidence(deutung: dict, ch: dict) -> dict:
     return res
 
 
+#: Why an interpretation is in the review queue, in a fixed order. The first two are the
+#: historical triggers and keep their meaning exactly (ENT-18); ``change_index_disputed``
+#: is added by AP-07. The queue is extended, not rebuilt.
+REVIEW_REASONS = ("contradiction_flag", "evidence_ok", "change_index_disputed")
+
+
+def _review_reasons(deutung: dict) -> list[str]:
+    """The reasons this interpretation needs a human look; empty means it does not."""
+    return [r for r in REVIEW_REASONS
+            if (not deutung["evidence_ok"] if r == "evidence_ok" else deutung.get(r))]
+
+
+def change_index_check(deutung: dict, ch: dict) -> dict:
+    """Cross-check the chosen ``change_index`` against every record of the chapter (AP-07).
+
+    ``evidence_match_chars`` is computed not only for the *chosen* record but for all of
+    them. The strongest candidate is reported as ``change_index_best``; if it is
+    *strictly* better than the chosen one, ``change_index_disputed`` is true.
+
+    Nothing is corrected. The model chooses which change its interpretation is about,
+    and it can be right for a reason text similarity cannot see -- it may interpret a
+    connection instead of quoting it. An automatic correction would replace a right
+    choice with a more similar one. The flag goes into the review queue, exactly as
+    ``evidence_unique`` does (ENT-30): mark, do not decide.
+
+    A tie is no contradiction: ``change_index_best`` then names the lowest of the tied
+    indices (deterministic) and ``change_index_disputed`` stays false. Where no record
+    supports the quote at all -- because there is no quote, or because it appears in
+    none of them -- ``change_index_best`` is ``None``: naming record 0 would be an
+    assertion without evidence, which is the error class this whole package closes.
+    """
+    ev = n2(deutung.get("evidence") or "").lower()
+    scores = [evidence_metrics(ev, _record_haystack(c))["evidence_match_chars"]
+              for c in ch["changes"]]
+    best = max(scores, default=0)
+    if best == 0:
+        return {"change_index_best": None, "change_index_disputed": False}
+    i = deutung.get("change_index")
+    # an absent or out-of-range index counts as covering nothing, so a record that does
+    # cover something disputes it -- the same fail-closed rule as change_haystack()
+    chosen = scores[i] if isinstance(i, int) and 0 <= i < len(scores) else -1
+    return {"change_index_best": scores.index(best),
+            "change_index_disputed": best > chosen}
+
+
 def _evidence_ok(ev: str, hay: str) -> bool:
     """The historical rule, unchanged: 15-character probe plus short-quote branch.
 
@@ -808,9 +889,12 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     # ---- phase 3: assemble, guard the evidence, collect the review queue ----------
     results = []
     review = []
+    dropped: list[dict] = []       # pipeline-owned values the model supplied anyway
     n_llm = 0
     for ch, cid, mid, tag, prompt, sel, old_x, new_x in jobs:
         data = answers.get(tag)
+        drops = Counter()          # field -> how often it arrived in this chapter
+        supplied = {}              # field -> the discarded value, for the report
         if data is None:
             # fallback: extractive
             data = {"section_id": cid,
@@ -821,26 +905,35 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                     "interpretations": [], "_source": "extractive"}
         else:
             n_llm += 1
+            # class P: whatever the model wrote into a pipeline-owned field is discarded
+            # here, before anything reads it, and counted below (AP-07)
+            supplied = drop_pipeline_owned(data, PIPELINE_OWNED_CHAPTER)
+            drops.update(supplied.keys())
             data["_source"] = "llm"
             for d in data.get("interpretations", []):
+                drops.update(drop_pipeline_owned(d, PIPELINE_OWNED_INTERPRETATION).keys())
                 d.update(check_evidence(d, ch))
+                # class V: the model's change_index stays as it is, the cross-check only
+                # says whether another record of the chapter fits the quote better
+                d.update(change_index_check(d, ch))
                 # the review queue still keys on evidence_ok (ENT-18): it switches to
-                # evidence_strict once the difference between both is quantified
-                if d.get("contradiction_flag") or not d["evidence_ok"]:
-                    review.append({"section_id": cid, "mapping_id": mid, **d})
+                # evidence_strict once the difference between both is quantified.
+                # change_index_disputed is an additional trigger, with its own reason.
+                reasons = _review_reasons(d)
+                if reasons:
+                    review.append({"section_id": cid, "mapping_id": mid,
+                                   "review_reasons": reasons, **d})
             # table/figure interpretations: check evidence against cells/captions
             if data.get("tables") or data.get("figures"):
                 hay = asset_haystack(ch, o_secs, n_secs)
-                for a in (data.get("tables") or []):
-                    a.update(check_asset_evidence(a, hay))
-                    if not a["evidence_ok"]:
-                        review.append({"section_id": cid, "mapping_id": mid,
-                                       "asset": "table", **a})
-                for a in (data.get("figures") or []):
-                    a.update(check_asset_evidence(a, hay))
-                    if not a["evidence_ok"]:
-                        review.append({"section_id": cid, "mapping_id": mid,
-                                       "asset": "figure", **a})
+                for kind in ("tables", "figures"):
+                    for a in (data.get(kind) or []):
+                        drops.update(drop_pipeline_owned(a, PIPELINE_OWNED_ASSET).keys())
+                        a.update(check_asset_evidence(a, hay))
+                        if not a["evidence_ok"]:
+                            review.append({"section_id": cid, "mapping_id": mid,
+                                           "asset": kind[:-1],
+                                           "review_reasons": ["evidence_ok"], **a})
         # Which chapter this answer belongs to is decided here, not in the answer: the
         # model is asked to echo section_id and in the 4110 run it did not -- it wrote a
         # slug of the heading, or the value of the "Teil" field for unnumbered annexes,
@@ -850,12 +943,26 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         data["_changes_total"] = len(ch["changes"])
         data["_changes_interpreted"] = sel if data.get("_source") == "llm" else []
         results.append(data)
+        for field, n in sorted(drops.items()):
+            was = supplied.get(field)
+            dropped.append({
+                "section_id": cid, "mapping_id": mid, "phase": "deutung",
+                "field": field, "count": n,
+                "finding": (f"the model supplied the pipeline-owned field "
+                            f"'{field}' {n}x; the value was discarded"
+                            + (f" (it said {was!r}, the pipeline says {cid!r})"
+                               if field == "section_id" and was != cid else "")),
+            })
 
     # aggregate preprocessing feedback -> feed it back to the pipeline phases
     feedback = []
     for r in results:
         for fb in r.get("pipeline_feedback") or []:
             feedback.append({"section_id": r.get("section_id"), **fb})
+    # ... and the pipeline's own feedback about the answers: what the model wrote into a
+    # field it does not own (AP-07). Five invented chapter ids made 165 interpretations
+    # uncheckable in the 4110 run, and nothing in the output said so.
+    feedback += dropped
     live = answer_source.live
     out = {"model": model if live else None, "mode": "api" if live else "export",
            "language": language,
@@ -866,8 +973,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     if feedback:
         L = ["# Vorverarbeitungs-Feedback aus der KI-Deutung\n",
              "_Von der Deutung gemeldete Artefakte — Kandidaten für Verbesserungen "
-             "in Ingest/Alignment/Diff (Phase in Klammern)._\n"]
-        from collections import Counter
+             "in Ingest/Alignment/Diff (Phase in Klammern). Phase `deutung`: Felder, "
+             "die das Modell geliefert hat, obwohl die Pipeline sie selbst setzt._\n"]
         by_phase = Counter(fb["phase"] for fb in feedback)
         L.append("**Verteilung:** " + ", ".join(f"{p}: {n}" for p, n in by_phase.most_common()) + "\n")
         for fb in feedback:
