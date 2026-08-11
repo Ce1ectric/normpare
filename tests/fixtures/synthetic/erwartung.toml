@@ -232,12 +232,30 @@ hinweis = "Gegenprobe zum vorigen Fall: Indikativ ohne Pflichtcharakter."
 
 [[evidenz]]
 fall = "zitat_mit_auslassung"
-kapitel = "4.1"
-zitat = "Die Prüfeinrichtung ist halbjährlich zu kalibrieren. … diese sind jährlich zu kalibrieren."
+kapitel = "5"
+zitat = "Die Messabweichung darf 2 % … zwischen 20 % und 80 % des Messbereichsendwerts liegt."
 erwartet_ok = true
 erwartet_strict = true
 erwartet_fragmente = 2
 zweck = "ENT-19: beide Fragmente sind im Quelltext vorhanden"
+hinweis = """Verschoben von 4.1 nach 5 am 2026-08-11. Der Fall lag ursprünglich in 4.1,
+bis AP-03 dort die Ausnahme in einen eigenen Absatz gezogen hat — seither hat 4.1 zwei
+Änderungsdatensätze, das Zitat spannte über beide, und `evidence_strict` prüft
+naturgemäß gegen **einen**. Kapitel 5 hat zwei Sätze in einem Absatz und damit einen
+Datensatz; damit prüft der Fall wieder, was er prüfen soll."""
+
+[[evidenz]]
+fall = "zitat_ueber_zwei_datensaetze"
+kapitel = "4.1"
+zitat = "Die Prüfeinrichtung ist halbjährlich zu kalibrieren. … diese sind jährlich zu kalibrieren."
+erwartet_ok = true
+erwartet_strict = false
+erwartet_fragmente = 2
+zweck = """Beide Fragmente stehen im Kapitel, aber in verschiedenen Änderungsdatensätzen.
+`evidence_strict` ist auf einen Datensatz bezogen und muss deshalb false liefern."""
+hinweis = """Das ist kein Mangel, sondern die Grenze der Definition: ein Beleg, der über
+zwei Änderungen hinweg zitiert, ist keiner von beiden eindeutig zuzuordnen. Der Fall hält
+diese Grenze fest, damit sie nicht versehentlich „behoben" wird."""
 
 [[evidenz]]
 fall = "zitat_mit_auslassung_fragment_fehlt"
