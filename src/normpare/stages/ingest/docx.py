@@ -22,6 +22,8 @@ from pathlib import Path
 
 from lxml import etree
 
+from . import SKIP_TITLES, VORSPANN_TITLES
+
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 M = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
 R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -253,6 +255,18 @@ def read_docx(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
         if is_main or is_annex_t or is_annex_s:
             if not t_strip:
                 continue        # deleted/empty heading -> no section
+            low_title = t_strip.lower()
+            if is_main and low_title in SKIP_TITLES:
+                # "Inhalt", "Bilder", "Tabellen": navigation, not a chapter. They carry a
+                # heading style, so without this they would take a number of their own.
+                continue
+            if is_main and low_title in VORSPANN_TITLES:
+                # Front matter has no chapter number in the standard, so it must not touch
+                # the counter -- otherwise every following chapter is shifted. Reading the
+                # 2023 edition as DOCX put "Begriffe" at 7 instead of 3 for exactly this
+                # reason. Same shape as the PDF reader, which files it under vorspann.
+                cur = new_section(f"vorspann.{low_title}", t_strip, 1, "vorspann")
+                continue
             if is_main:
                 lvl = main_lvl
                 st8.counters[lvl - 1] += 1

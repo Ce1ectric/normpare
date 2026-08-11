@@ -15,6 +15,20 @@ from typing import Any
 from ...errors import IngestError
 from ...model import NormDocument
 
+#: Front-matter headings. They carry text but no chapter number, so they must not enter
+#: the main-body counter -- otherwise every following chapter is shifted. Both readers
+#: file them under ``vorspann.<name>``.
+VORSPANN_TITLES = frozenset({"vorwort", "einleitung", "anwendungsbeginn", "änderungen"})
+
+#: Headings of the navigation lists. They are not chapters and get no section at all.
+SKIP_TITLES = frozenset({"inhalt", "inhaltsverzeichnis", "bilder", "tabellen",
+                         "contents", "table of contents", "figures", "tables"})
+
+# Both sets live here rather than in one reader because the DOCX and the PDF path have to
+# agree on them. They did not: reading the 2023 edition as DOCX counted "Vorwort",
+# "Einleitung", "Anwendungsbeginn" and "Änderungen" as chapters 1 to 4, so "Begriffe"
+# came out as chapter 7 instead of 3 -- and every chapter number after it was wrong.
+
 
 def read_document(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                   version_label: str) -> NormDocument:

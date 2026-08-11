@@ -21,6 +21,8 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 
+from . import SKIP_TITLES, VORSPANN_TITLES
+
 
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -33,12 +35,12 @@ def _sha256(path: Path) -> str:
 _TOC_MAIN = re.compile(r"^(\d+(?:\.\d+)*)\s+(.*)$")
 _TOC_ANNEX = re.compile(r"^Anhang\s+([A-Z])\s*(?:\((normativ|informativ)\))?\s*[–—\-:]?\s*(.*)$")
 _TOC_ANNEX_SUB = re.compile(r"^([A-Z])\.(\d+(?:\.\d+)*)\s+(.*)$")
-_VORSPANN = {"vorwort", "einleitung", "anwendungsbeginn", "änderungen"}
-# Table-of-contents lines that are not chapters. Running headers (the standard's own
-# designation repeated on every page) are filtered generically in `_is_skip_toc` by matching
-# the document's own title, so no standard-specific names have to be hard-coded here.
-_SKIP_TOC = {"inhalt", "inhaltsverzeichnis", "bilder", "tabellen",
-             "contents", "table of contents", "figures", "tables"}
+# Front matter and the navigation lists live in the package: the DOCX reader has to agree
+# with this one. Running headers (the standard's own designation repeated on every page)
+# are filtered generically in `_is_skip_toc` by matching the document's own title, so no
+# standard-specific names are hard-coded here.
+_VORSPANN = VORSPANN_TITLES
+_SKIP_TOC = SKIP_TITLES
 
 
 def _is_skip_toc(line: str, doc_title: str = "") -> bool:
