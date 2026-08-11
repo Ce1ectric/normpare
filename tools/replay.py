@@ -11,12 +11,14 @@ The interpretation stage is *never* run -- no LLM call, no network. The Hugging
 Face libraries are pinned to offline mode, and every vector the embedding rescue
 pass needs is already in the copied cache.
 
-The destination must lie below ``runs/``; ``regression.guard_write`` refuses any
-target below ``out/``, because the reference runs are irreplaceable.
+The destination is a run directory or, since AP-06, the reference of a baseline
+(``baselines/4110_replay``); ``regression.guard_write`` refuses any target below
+``out/``, because the frozen reference runs are irreplaceable.
 
 Usage::
 
     python tools/replay.py --reference out/4110_hot --dest runs/AP-01_2026-08-10/replay
+    python tools/replay.py --reference out/4110_hot --dest baselines/4110_replay --enrich
 """
 from __future__ import annotations
 

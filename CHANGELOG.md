@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- The 4110 regression baseline points at a replay of the reference run, not at the frozen
+  July run itself. The frozen run never changes and the code does, so every approved
+  improvement moved the two further apart and was reported as a regression; a harness that
+  turns red on every improvement stops being read. The frozen run keeps its own job — the
+  historical record of what was delivered — and the baseline tracks the last approved
+  state. The one documented deviation of the old baseline (the German/English schema break
+  between `chapters.json` and `deutung.json` in the July run) does not exist in the replay
+  and was dropped with it; the `known_deviations` mechanism itself is unchanged.
+
 ### Added
 
 - Every run writes a `manifest.json`: schema version, normpare version, timestamp, both
