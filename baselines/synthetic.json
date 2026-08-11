@@ -5,31 +5,31 @@
    "sha256": "600598466930e56d6a152ad70aad01f57ad3341ef7056ad1240c28f20a33c397"
   },
   "chapters.json": {
-   "bytes": 20813,
-   "sha256": "809bbda6854cb1ce1fdc5393e10252f457d11359b74fbfcd6bce017050a9f557"
+   "bytes": 21200,
+   "sha256": "3b1be73be8f9934ff1932518f8c8377a79a8e788cb616d5afb643f4a941a4914"
   },
   "keywords.json": {
    "bytes": 726,
    "sha256": "3e956a9e45e75cb7776a413034635299859c23aa4ac41a69c20ba2f200b75a76"
   },
   "mapping.json": {
-   "bytes": 8062,
-   "sha256": "ca7e537da32b6bd18bcf4db5e0adfdeec122550cca63adbbd53aea30d1da6cc8"
+   "bytes": 8449,
+   "sha256": "b6e2467c818408a1531e72c0e76537b21699ea0d88b900b031ed4effc61b9c80"
   },
   "neu/norm_doc.json": {
    "bytes": 17220,
    "sha256": "1a519219e370f6e83afbb8c8bbe1b84f38a0fdcb85a6c798f29b79740de800ce"
   },
   "statistics.json": {
-   "bytes": 1042,
-   "sha256": "6efd5a3e7b881552dfeb8d9ba066dd613672fcb6eed8a6c1f566ca10cd091860"
+   "bytes": 1076,
+   "sha256": "c66cef209b0b1c0f614d55cd082413e2af726324e136bc693d448bd3f355813c"
   },
   "synopse.json": {
-   "bytes": 16926,
-   "sha256": "6d252a1785d3f2d917134cb2fd2ffd57d03fc35f5fdc7b40583b20a9d35b8fcd"
+   "bytes": 17313,
+   "sha256": "333d875cf65e8326caa335a85c542bdfad68afce483fd140b8da22d523687922"
   }
  },
- "created": "2026-08-10T20:27:08Z",
+ "created": "2026-08-11T09:19:21Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "baselines/synthetic",
