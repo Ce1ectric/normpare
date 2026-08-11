@@ -13,19 +13,26 @@ def build_dossier(new_doc: dict, old_doc: dict, synopse: dict, deutung: dict | N
                   out_path: str | Path) -> dict:
     n_secs = {s["id"]: s for s in new_doc["sections"]}
     o_secs = {s["id"]: s for s in old_doc["sections"]}
-    deut_by_id = {d.get("section_id"): d for d in (deutung or {}).get("chapters", [])}
+    # An interpretation is joined by its mapping id (ENT-24), which the interpretation
+    # stage sets itself. section_id is the fallback for runs made before AP-06, where the
+    # key was whatever the model echoed -- ambiguous, and wrong in ten chapters of 4110.
+    deutungen = (deutung or {}).get("chapters", [])
+    deut_by_mapping = {d["mapping_id"]: d for d in deutungen if d.get("mapping_id")}
+    deut_by_section = {d.get("section_id"): d for d in deutungen}
 
     chapters = []
     for ch in synopse["chapters"]:
         cid = ch.get("new_id") or ch.get("old_id")
+        mid = ch.get("mapping_id")
         sec = n_secs.get(ch.get("new_id")) or o_secs.get(ch.get("old_id")) or {}
-        d = deut_by_id.get(cid, {})
+        d = deut_by_mapping.get(mid) or deut_by_section.get(cid) or {}
         subst = [c for c in ch["changes"] if c["kind"] != "cosmetic"]
         kennwerte = []
         for c in ch["changes"]:
             for k in (c.get("kennwerte") or {}).get("changed", []):
                 kennwerte.append({"old": k["old"]["raw"], "new": k["new"]["raw"]})
         chapters.append({
+            "mapping_id": mid,
             "id": cid,
             "old_ids": ch.get("old_ids"), "new_ids": ch.get("new_ids"),
             "title": ch.get("title"),

@@ -323,10 +323,14 @@ def build_annotated_html(new_doc: dict, synopse: dict, deutung: dict | None,
             ch_by_new[nid] = ch
         if ch["mode"] == "removed":
             ch_by_old_removed.append(ch)
-    deut_by_id = {}
+    # keyed by mapping id (ENT-24), with section_id as the fallback for older runs and
+    # for a section that has no chapter record at all
+    deut_by_mapping, deut_by_section = {}, {}
     if deutung:
         for d in deutung.get("chapters", []):
-            deut_by_id[d.get("section_id")] = d
+            if d.get("mapping_id"):
+                deut_by_mapping[d["mapping_id"]] = d
+            deut_by_section[d.get("section_id")] = d
 
     # --- table maps for real cell diff + figure index ---------------
     old_tab_map, new_tab_map = {}, {}
@@ -361,7 +365,8 @@ def build_annotated_html(new_doc: dict, synopse: dict, deutung: dict | None,
                    f'{html.escape(sec["title"][:40])}</a>')
         hdr = f'<h2 class="chap" id="sec-{html.escape(sid)}">{html.escape(sid)} — ' \
               f'{html.escape(sec["title"])}{part_badge.get(sec["part"], "")}'
-        d = deut_by_id.get(sid) if primary or not ch else None
+        d = ((deut_by_mapping.get(ch.get("mapping_id")) or deut_by_section.get(sid))
+             if primary else (deut_by_section.get(sid) if not ch else None))
         if d and d.get("training_relevance"):
             hdr += (f'<span class="badge b-rel-{d["training_relevance"]}">'
                     f'Relevanz: {_lbl(d["training_relevance"], lang)}</span>')
