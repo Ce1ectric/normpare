@@ -28,6 +28,7 @@ from normpare.stages.deutung import (
     PIPELINE_OWNED_ASSET,
     PIPELINE_OWNED_CHAPTER,
     PIPELINE_OWNED_INTERPRETATION,
+    FixtureProvider,
     build_chapter_prompt,
     build_system_prompt,
     cache_key,
@@ -36,7 +37,6 @@ from normpare.stages.deutung import (
     drop_pipeline_owned,
     run_deutung,
 )
-from normpare.stages.deutung import FixtureProvider
 
 MODEL = "test-model"
 
