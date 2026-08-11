@@ -251,3 +251,57 @@ def test_modality_change_is_detected(expectation, synthetic_run):
         "the change does not carry the old wording it replaces"
     assert (change.get("modality") or {}) == {"old": "sollte", "new": "muss",
                                               "shift": "verschaerft"}
+
+
+# -- the interpretation stage joins back onto its chapters (AP-06) --------------------------
+
+class _WrongIdProvider:
+    """Answers every chapter, but names the same wrong ``section_id`` in all of them.
+
+    That is what the real model did in the 4110 run: instead of echoing the chapter id
+    from the prompt it wrote a slug of the heading or, for unnumbered annexes, the value
+    of the ``Teil`` field -- ``anhang_informativ`` five times. 165 interpretations
+    (10.6 %) could not be checked against their chapter afterwards. The stage must key
+    the answer to its chapter itself instead of trusting the echo.
+    """
+
+    live = True
+
+    def __init__(self, section_id: str = "anhang_informativ"):
+        self.section_id = section_id
+
+    def _answer(self, tag: str) -> dict:
+        return {"section_id": self.section_id,
+                "summary_old": "", "summary_new": "",
+                "change_overview": f"overview of {tag}",
+                "training_relevance": "low", "keywords": [], "practical_note": "",
+                "interpretations": [
+                    {"change_index": 0, "semantic_label": "clarified",
+                     "obligation": "unchanged", "change": "a change",
+                     "impact": "", "cross_reference_note": "", "evidence": "",
+                     "confidence": "low", "contradiction_flag": False}]}
+
+    def resolve(self, items: list[tuple[str, str]]) -> dict[str, dict]:
+        return {tag: self._answer(tag) for tag, _ in items}
+
+
+def test_every_interpretation_finds_its_chapter(synthetic_run, tmp_path):
+    """Every interpretation still finds its chapter, even with a useless ``section_id``."""
+    from normpare.report.dossier_report import build_dossier
+    from normpare.stages.deutung import run_deutung
+
+    deutung = run_deutung(synthetic_run.synopse, synthetic_run.old_doc,
+                          synthetic_run.new_doc, tmp_path, tmp_path, model="fixture",
+                          deutung_provider=_WrongIdProvider())
+    dossier = build_dossier(synthetic_run.new_doc, synthetic_run.old_doc,
+                            synthetic_run.synopse, deutung, tmp_path / "chapters.json")
+
+    by_mapping = {c["mapping_id"]: c for c in dossier["chapters"]}
+    assert len(by_mapping) == len(dossier["chapters"]), "chapters.json has a duplicate key"
+
+    assert deutung["chapters"], "the corpus produced no interpretation at all"
+    for d in deutung["chapters"]:
+        ch = by_mapping.get(d.get("mapping_id"))
+        assert ch is not None, f"interpretation {d.get('mapping_id')!r} has no chapter"
+        assert ch["change_overview"] == d["change_overview"], \
+            f"chapter {ch['mapping_id']} carries the interpretation of another chapter"
