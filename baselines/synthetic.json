@@ -1,12 +1,12 @@
 {
  "artifacts": {
   "alt/norm_doc.json": {
-   "bytes": 17057,
-   "sha256": "c9598dcf2e8649c56006f0cbd5710793e3cfc8be2fa1acf205be401f0d599dd8"
+   "bytes": 16998,
+   "sha256": "600598466930e56d6a152ad70aad01f57ad3341ef7056ad1240c28f20a33c397"
   },
   "chapters.json": {
-   "bytes": 20831,
-   "sha256": "0e96cdfa537105f7e70534833b9101c160622a53a195ba3e5198c19295ff3051"
+   "bytes": 20813,
+   "sha256": "809bbda6854cb1ce1fdc5393e10252f457d11359b74fbfcd6bce017050a9f557"
   },
   "keywords.json": {
    "bytes": 726,
@@ -17,19 +17,19 @@
    "sha256": "ca7e537da32b6bd18bcf4db5e0adfdeec122550cca63adbbd53aea30d1da6cc8"
   },
   "neu/norm_doc.json": {
-   "bytes": 17209,
-   "sha256": "287ee8f3bd31bbb4e10d6e0a4f276ac95bffb4117529d8305bc3399a6cfe78a7"
+   "bytes": 17220,
+   "sha256": "1a519219e370f6e83afbb8c8bbe1b84f38a0fdcb85a6c798f29b79740de800ce"
   },
   "statistics.json": {
    "bytes": 1042,
-   "sha256": "8228c2d548b0dfc54b4bd65b8ff79c05aab70486c5f67a4207809ff823d6531d"
+   "sha256": "6efd5a3e7b881552dfeb8d9ba066dd613672fcb6eed8a6c1f566ca10cd091860"
   },
   "synopse.json": {
-   "bytes": 16944,
-   "sha256": "9d55fd19a628cc61d7182aada0ed50769941ad80fb38734ee34c356f0073c56f"
+   "bytes": 16926,
+   "sha256": "6d252a1785d3f2d917134cb2fd2ffd57d03fc35f5fdc7b40583b20a9d35b8fcd"
   }
  },
- "created": "2026-08-10T19:49:48Z",
+ "created": "2026-08-10T20:27:08Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "baselines/synthetic",

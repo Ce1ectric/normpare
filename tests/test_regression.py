@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import pathlib
+import sys
 from pathlib import Path
 
 import pytest
@@ -330,3 +331,25 @@ def test_harness_schreibt_nicht_nach_out(tmp_path, monkeypatch):
     offenders = [p for p in writes if out_root in Path(p).resolve().parents
                  or Path(p).resolve() == out_root]
     assert offenders == [], f"harness opened paths below out/ for writing: {offenders}"
+
+
+# -- the replay driver ---------------------------------------------------------------------
+
+_REPLAY_SPEC = importlib.util.spec_from_file_location(
+    "replay", Path(__file__).resolve().parents[1] / "tools" / "replay.py")
+
+
+def test_replay_stages_add_enrichment_only_on_request():
+    """The frozen ``norm_doc.json`` is already enriched -- re-running it is opt-in.
+
+    AP-05 changed the enrichment itself (modality), so the replay has to be able to
+    recompute it; every earlier package must keep the stage list it had.
+    """
+    replay = importlib.util.module_from_spec(_REPLAY_SPEC)
+    # replay.py runs from tools/ and imports its neighbour by plain name
+    sys.modules.setdefault("regression", regression)
+    _REPLAY_SPEC.loader.exec_module(replay)
+
+    assert replay.stages() == replay.STAGES
+    assert "enrich" not in replay.stages()
+    assert replay.stages(enrich=True) == ["enrich"] + replay.STAGES

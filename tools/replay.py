@@ -39,6 +39,17 @@ FROZEN = ("alt/norm_doc.json", "neu/norm_doc.json", "deutung.json", ".vec_cache.
 STAGES = ["map", "align", "synopse", "keywords", "report"]
 
 
+def stages(enrich: bool = False) -> list[str]:
+    """The stages to recompute.
+
+    ``enrich`` prepends the enrichment stage. The frozen ``norm_doc.json`` already carries
+    the enrichment of the reference run, so re-running it is only needed when the
+    enrichment itself changed -- modality, references, values. It rewrites the copied
+    files in place; the reference stays untouched either way.
+    """
+    return (["enrich"] if enrich else []) + STAGES
+
+
 def _offline() -> None:
     """Pin the embedding stack to local files, so a missing model fails loudly."""
     for var in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"):
@@ -77,7 +88,7 @@ def build_config(reference: Path, dest: Path):
     )
 
 
-def replay(reference: Path, dest: Path) -> Path:
+def replay(reference: Path, dest: Path, enrich: bool = False) -> Path:
     """Copy the frozen inputs and recompute the deterministic stages into ``dest``."""
     from normpare.pipeline import Pipeline
 
@@ -86,8 +97,9 @@ def replay(reference: Path, dest: Path) -> Path:
     print(f"[replay] frozen inputs copied: {', '.join(copied)}")
     cfg = build_config(reference, dest)
     print(f"[replay] embed rescue pass: {'on' if cfg.embed_fallback else 'off'}")
-    Pipeline(cfg).run(STAGES, use_llm=False)
-    print(f"[replay] stages recomputed: {', '.join(STAGES)}")
+    todo = stages(enrich)
+    Pipeline(cfg).run(todo, use_llm=False)
+    print(f"[replay] stages recomputed: {', '.join(todo)}")
     return dest
 
 
@@ -97,9 +109,12 @@ def main(argv=None) -> int:
     ap.add_argument("--dest", required=True, help="destination below runs/")
     ap.add_argument("--baseline", default=None,
                     help="baseline to compare the replay against (default: none)")
+    ap.add_argument("--enrich", action="store_true",
+                    help="re-run the enrichment stage on the copied norm_doc.json "
+                         "(needed when modality, references or values changed)")
     args = ap.parse_args(argv)
 
-    dest = replay(Path(args.reference), Path(args.dest))
+    dest = replay(Path(args.reference), Path(args.dest), enrich=args.enrich)
     if not args.baseline:
         return 0
     return regression.check(dest, Path(args.baseline), explain=True)
