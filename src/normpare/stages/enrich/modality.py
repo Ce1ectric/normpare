@@ -107,16 +107,23 @@ _P_INFINITIV_SYNTH = re.compile(rf"\b(?i:{_AUX})\b{_GAP}{_INFINITIVE}"
 _PERMISSION_PREDICATE = ("zulässig|möglich|erlaubt|gestattet|statthaft|freigestellt|"
                          "optional|nicht erforderlich|nicht notwendig|nicht zwingend")
 
+#: The comma that opens the infinitive clause. It is what makes the predicate the governor
+#: of the infinitive and not merely a word in front of it: "sind zulässig **und** durch den
+#: Hersteller auszuweisen" permits *and* obliges -- there the infinitive is coordinated with
+#: the predicate, both governed by the same auxiliary, and the duty stands.
+_FRAME_END = r"(?=\s*,)"
+
 #: ``ist``/``sind``, an optional ``es``, up to two adverbs ("ist es **zudem** zulässig"),
 #: then the predicate. No comma may fall inside the frame -- it is one clause, not a
 #: sentence-wide property.
 _P_PERMISSION_FRAME = re.compile(
     rf"\b(?:ist|sind)\b(?:\s+es\b)?(?:\s+(?!(?:{_PERMISSION_PREDICATE})\b)[a-zäöüß]+\b){{0,2}}"
-    rf"\s+(?P<pred>{_PERMISSION_PREDICATE})\b", re.I)
+    rf"\s+(?P<pred>{_PERMISSION_PREDICATE})\b{_FRAME_END}", re.I)
 
 #: "Es steht dem Betreiber frei, ... anzuwenden" -- same job, fixed wording instead of a
 #: predicate list.
-_P_FREE_CHOICE = re.compile(r"\bsteht\b(?:\s+[\wäöüß]+\b){0,3}?\s+(?P<pred>frei)\b", re.I)
+_P_FREE_CHOICE = re.compile(
+    rf"\bsteht\b(?:\s+[\wäöüß]+\b){{0,3}}?\s+(?P<pred>frei)\b{_FRAME_END}", re.I)
 
 
 def _mask_permission_frames(s: str) -> str:
