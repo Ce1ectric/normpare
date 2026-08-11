@@ -12,9 +12,9 @@ Two independent guards against unintended change:
 
 Usage::
 
-    python tools/regression.py --dir out/4110_hot --update     # write the baseline
-    python tools/regression.py --dir out/4110_hot              # check against it
-    python tools/regression.py --dir runs/.../replay --name 4110_hot --explain
+    python tools/regression.py --dir baselines/4110_replay --name 4110 --update
+    python tools/regression.py --dir baselines/4110_replay --name 4110
+    python tools/regression.py --dir runs/.../replay --name 4110 --explain
 
 A baseline may declare ``known_deviations`` (ENT-25): an artifact that is allowed to
 differ from the reference as long as its hash equals the documented
@@ -25,6 +25,13 @@ The baseline is a JSON file under ``baselines/``; the reference artifacts themse
 are *not* copied, the baseline only points at the directory they live in. The
 harness never opens a path below ``out/`` for writing (:func:`guard_write`) -- the
 reference runs are irreplaceable.
+
+The reference a baseline points at is a *replay*, not a frozen run of the past
+(AP-06): ``out/4110_hot`` was recorded in July and never changes, while the code does,
+so every approved improvement drove the two further apart and the harness reported it
+as a regression. A harness that turns red on every improvement stops being read. The
+frozen run stays what it always was -- the historical record of what was delivered --
+and the baseline tracks the last approved state instead.
 """
 from __future__ import annotations
 

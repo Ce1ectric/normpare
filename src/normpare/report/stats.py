@@ -40,14 +40,20 @@ def pair_stats(synopse: dict) -> dict:
     kennwert_changes = []
     mod_shifts = Counter()
     part_changes = []
+    part_changed_ids = []
     for ch in synopse["chapters"]:
+        # cid is what a reader sees on a slide; mapping_id is what points back at exactly
+        # one chapter mapping (ENT-24). Both are kept: the readable one alone is not
+        # unique, the unique one alone is not readable.
         cid = ch.get("new_id") or ch.get("old_id")
+        mid = ch.get("mapping_id")
         if ch.get("part_changed"):
             part_changes.append(cid)
+            part_changed_ids.append(mid)
         for c in ch["changes"]:
             kinds[c["kind"]] += 1
             for k in (c.get("kennwerte") or {}).get("changed", []):
-                kennwert_changes.append({"chapter": cid,
+                kennwert_changes.append({"chapter": cid, "mapping_id": mid,
                                          "old": k["old"]["raw"], "new": k["new"]["raw"]})
             sh = (c.get("modality") or {}).get("shift")
             if sh and sh != "unveraendert":
@@ -56,7 +62,8 @@ def pair_stats(synopse: dict) -> dict:
             "n_chapters_with_changes": sum(1 for ch in synopse["chapters"] if ch["changes"]),
             "kennwert_changes": kennwert_changes,
             "modality_shifts": dict(mod_shifts),
-            "part_changed_chapters": part_changes}
+            "part_changed_chapters": part_changes,
+            "part_changed_mapping_ids": part_changed_ids}
 
 
 def build_statistics(old_doc, new_doc, synopse, out_path: str | Path) -> dict:

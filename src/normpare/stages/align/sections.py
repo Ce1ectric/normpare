@@ -9,10 +9,16 @@ Passes:
                    content similarity of the old text against the union of candidates
 Match types: id+title | title | sequence | split | merge | new | removed
 A normative<->informative (part) switch is reported as a flag.
+
+Every record carries a ``mapping_id`` (ENT-24): the identifier of the *mapping*, as
+opposed to ``cid = new_id or old_id``, which only names one of its two sides. See
+:func:`mapping_id`.
 """
 from __future__ import annotations
+import hashlib
 import json
 import re
+from collections import Counter
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -45,6 +51,69 @@ def _sec_text(sec, max_chars=1500) -> str:
 
 def _generic(title: str) -> bool:
     return n3(title) in {"allgemeines", "allgemeine anforderungen", "anforderungen", "grundsätze"}
+
+
+# -- the identifier of a mapping (ENT-24) ---------------------------------------------
+
+#: Ids listed in full on one side of a :func:`mapping_id` before it is shortened.
+MAX_LISTED_IDS = 3
+
+
+def _side(ids) -> str:
+    """One side of a mapping id: the ids sorted, joined by ``+``.
+
+    Beyond :data:`MAX_LISTED_IDS` sources the list would stop being readable, so it is
+    cut and a digest of the *complete* sorted list is appended (``+~1a2b3c4d``). The
+    digest keeps the id unique where the visible part no longer distinguishes.
+    """
+    ids = sorted(str(i) for i in ids if i)
+    if len(ids) <= MAX_LISTED_IDS:
+        return "+".join(ids)
+    digest = hashlib.sha1("+".join(ids).encode("utf-8")).hexdigest()[:8]
+    return "+".join(ids[:MAX_LISTED_IDS]) + f"+~{digest}"
+
+
+def mapping_id(old_ids, new_ids) -> str:
+    """Stable identifier of one chapter mapping: ``<new ids>`` ``<`` ``<old ids>``.
+
+    ``cid = new_id or old_id`` names a chapter, not a mapping: it silently drops the
+    old side of every merge and the new side of every split, and two chapters that
+    ingest gave the same synthetic id collapse onto one key. Both sides are listed
+    here, each sorted, so the id is unique by construction and the same mapping always
+    produces the same string::
+
+        4.3<4.2      renumbered        1<1          unchanged
+        6<6.1+6.2    merge             4+4.2<4      split
+        10<          added             <11          removed
+
+    The ids come from :func:`qualified_ids` where a document repeats one.
+    """
+    return f"{_side(new_ids)}<{_side(old_ids)}"
+
+
+def qualified_ids(sections) -> list[str]:
+    """One id per section, qualified by occurrence where the document repeats one.
+
+    Section ids are meant to be unique, and in the real 4110 corpus they are (295 + 416
+    sections, no duplicate). But ingest derives an id for every unnumbered chapter, and
+    for annexes it derives it from the part: the July run handed out ``anhang_informativ``
+    three times and ``anhang_normativ`` twice. Every consumer keying on that id lost
+    three of the five chapters. A duplicate therefore gets its ordinal appended
+    (``anhang_informativ#2``) -- unique ids are left untouched, so the common case stays
+    readable. The ordinal counts occurrences in document order and is as stable as that
+    order is.
+    """
+    counts = Counter(s["id"] for s in sections)
+    seen: Counter = Counter()
+    out = []
+    for s in sections:
+        sid = s["id"]
+        if counts[sid] == 1:
+            out.append(sid)
+        else:
+            seen[sid] += 1
+            out.append(f"{sid}#{seen[sid]}")
+    return out
 
 
 def build_section_mapping(old_doc: dict, new_doc: dict, sim_backend,
@@ -165,6 +234,9 @@ def build_section_mapping(old_doc: dict, new_doc: dict, sim_backend,
                 "formulas": [], "figures": [], "synthetic_title": True})
 
     # ---- Records ----------------------------------------------------------------
+    # The mapping id is built from the section *positions*, not from the id strings:
+    # only here is it still known which of two chapters sharing an id is meant.
+    oq, nq = qualified_ids(olds), qualified_ids(news)
     records = []
     for oi, o in enumerate(olds):
         if oi in absorbed_old:
@@ -187,16 +259,20 @@ def build_section_mapping(old_doc: dict, new_doc: dict, sim_backend,
             if kids_n:
                 rec["new_ids"] = [n["id"]] + [news[k]["id"] for k in kids_n]
                 rec["restructured"] = ("split_down" if not kids_o else "both")
+            rec["mapping_id"] = mapping_id([oq[i] for i in [oi] + kids_o],
+                                           [nq[j] for j in [m["ni"]] + kids_n])
             records.append(rec)
         else:
             records.append({**base, "new_id": None, "match_type": "removed",
-                            "confidence": 0.0, "part_changed": False})
+                            "confidence": 0.0, "part_changed": False,
+                            "mapping_id": mapping_id([oq[oi]], [])})
     for nj, n in enumerate(news):
         if nj not in used_new:
             records.append({"old_id": None, "new_id": n["id"], "new_title": n["title"],
                             "new_level": n["level"], "new_part": n["part"],
                             "new_paras": len(n["paragraphs"]),
-                            "match_type": "new", "confidence": 0.0, "part_changed": False})
+                            "match_type": "new", "confidence": 0.0, "part_changed": False,
+                            "mapping_id": mapping_id([], [nq[nj]])})
     return records
 
 

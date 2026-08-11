@@ -41,10 +41,13 @@ def build_docx_synopse(synopse: dict, deutung: dict | None, out_path: str | Path
                        pair_label: str, include_cosmetic: bool = False):
     from ..stages.deutung import label as _lbl   # renders the neutral enums in the doc language
     lang = (deutung or {}).get("language", "de")
-    deut_by_id = {}
+    # keyed by mapping id (ENT-24), with section_id as the fallback for older runs
+    deut_by_mapping, deut_by_section = {}, {}
     if deutung:
         for d in deutung.get("chapters", []):
-            deut_by_id[d.get("section_id")] = d
+            if d.get("mapping_id"):
+                deut_by_mapping[d["mapping_id"]] = d
+            deut_by_section[d.get("section_id")] = d
 
     doc = Document()
     for s in doc.sections:
@@ -85,7 +88,7 @@ def build_docx_synopse(synopse: dict, deutung: dict | None, out_path: str | Path
             r.font.color.rgb = RED
             r.bold = True
 
-        d = deut_by_id.get(cid)
+        d = deut_by_mapping.get(ch.get("mapping_id")) or deut_by_section.get(cid)
         if d:
             if d.get("keywords"):
                 p = doc.add_paragraph()

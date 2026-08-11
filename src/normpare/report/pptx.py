@@ -84,7 +84,15 @@ def build_pptx(synopse: dict, deutung: dict | None, statistics: dict,
                out_path: str | Path, pair_label: str, top_n: int = 22):
     from ..stages.deutung import label as _lbl   # renders the neutral enums in the doc language
     lang = (deutung or {}).get("language", "de")
-    deut_by_id = {d.get("section_id"): d for d in (deutung or {}).get("chapters", [])}
+    deutungen = (deutung or {}).get("chapters", [])
+    # keyed by mapping id (ENT-24), with section_id as the fallback for older runs
+    deut_by_mapping = {d["mapping_id"]: d for d in deutungen if d.get("mapping_id")}
+    deut_by_section = {d.get("section_id"): d for d in deutungen}
+
+    def _deutung(ch: dict) -> dict | None:
+        return (deut_by_mapping.get(ch.get("mapping_id"))
+                or deut_by_section.get(ch.get("new_id") or ch.get("old_id")))
+
     prs = Presentation()
 
     _title_slide(prs, f"Änderungen {pair_label}",
@@ -118,11 +126,10 @@ def build_pptx(synopse: dict, deutung: dict | None, statistics: dict,
     # top chapters
     ranked = sorted((ch for ch in synopse["chapters"]
                      if any(c["kind"] != "cosmetic" for c in ch["changes"])),
-                    key=lambda ch: -_chapter_priority(
-                        ch, deut_by_id.get(ch.get("new_id") or ch.get("old_id"))))
+                    key=lambda ch: -_chapter_priority(ch, _deutung(ch)))
     for ch in ranked[:top_n]:
-        cid = ch.get("new_id") or ch.get("old_id")
-        d = deut_by_id.get(cid)
+        cid = ch.get("new_id") or ch.get("old_id")     # the readable chapter number
+        d = _deutung(ch)
         bullets = []
         if d and d.get("change_overview"):
             bullets.append((d["change_overview"], 0, None, False))

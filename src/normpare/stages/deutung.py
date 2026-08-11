@@ -786,7 +786,7 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         return " ".join(txt)
 
     # ---- phase 1: build one prompt per in-scope chapter --------------------------
-    jobs = []          # (ch, cid, tag, prompt, sel, old_x, new_x)
+    jobs = []          # (ch, cid, mid, tag, prompt, sel, old_x, new_x)
     for ch in synopse["chapters"]:
         substantive = [c for c in ch["changes"] if not c.get("semantic_equal")]
         if scope == "core" and not substantive and not ch.get("part_changed"):
@@ -795,18 +795,21 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         new_x = sec_excerpt(n_secs, ch.get("new_ids") or [])
         prompt, sel = build_chapter_prompt(ch, old_x, new_x, o_secs, n_secs)
         cid = ch.get("new_id") or ch.get("old_id")
-        jobs.append((ch, cid, re.sub(r"[^\w.]", "_", str(cid)), prompt, sel, old_x, new_x))
+        # the tag routes the answer back to its chapter and names the exported prompt
+        # file, so it has to be unique: it is built from the mapping id (ENT-24)
+        mid = ch.get("mapping_id") or str(cid)
+        jobs.append((ch, cid, mid, re.sub(r"[^\w.]", "_", mid), prompt, sel, old_x, new_x))
 
     # ---- phase 2: resolve the answers --------------------------------------------
     # The provider decides how: batch mode submits every uncached chapter in one
     # asynchronous batch (~50% cheaper), otherwise the chapters are asked one by one.
-    answers = answer_source.resolve([(j[2], j[3]) for j in jobs])
+    answers = answer_source.resolve([(j[3], j[4]) for j in jobs])
 
     # ---- phase 3: assemble, guard the evidence, collect the review queue ----------
     results = []
     review = []
     n_llm = 0
-    for ch, cid, tag, prompt, sel, old_x, new_x in jobs:
+    for ch, cid, mid, tag, prompt, sel, old_x, new_x in jobs:
         data = answers.get(tag)
         if data is None:
             # fallback: extractive
@@ -824,18 +827,26 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                 # the review queue still keys on evidence_ok (ENT-18): it switches to
                 # evidence_strict once the difference between both is quantified
                 if d.get("contradiction_flag") or not d["evidence_ok"]:
-                    review.append({"section_id": cid, **d})
+                    review.append({"section_id": cid, "mapping_id": mid, **d})
             # table/figure interpretations: check evidence against cells/captions
             if data.get("tables") or data.get("figures"):
                 hay = asset_haystack(ch, o_secs, n_secs)
                 for a in (data.get("tables") or []):
                     a.update(check_asset_evidence(a, hay))
                     if not a["evidence_ok"]:
-                        review.append({"section_id": cid, "asset": "table", **a})
+                        review.append({"section_id": cid, "mapping_id": mid,
+                                       "asset": "table", **a})
                 for a in (data.get("figures") or []):
                     a.update(check_asset_evidence(a, hay))
                     if not a["evidence_ok"]:
-                        review.append({"section_id": cid, "asset": "figure", **a})
+                        review.append({"section_id": cid, "mapping_id": mid,
+                                       "asset": "figure", **a})
+        # Which chapter this answer belongs to is decided here, not in the answer: the
+        # model is asked to echo section_id and in the 4110 run it did not -- it wrote a
+        # slug of the heading, or the value of the "Teil" field for unnumbered annexes,
+        # which left 165 interpretations (10.6 %) without a chapter to check them against.
+        data["mapping_id"] = mid
+        data["section_id"] = cid
         data["_changes_total"] = len(ch["changes"])
         data["_changes_interpreted"] = sel if data.get("_source") == "llm" else []
         results.append(data)
