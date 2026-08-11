@@ -14,6 +14,11 @@ Two things beyond the modal verbs:
   ``runs/AP-05_2026-08-10/BERICHT.md``).
 * **"ANMERKUNG"/"BEISPIEL"** markers as informativ.
 
+What the modal infinitive is *not* is the **permission frame** ``ist/sind (es)
+<predicate>`` in front of the same infinitive ("ist es zulässig, ... heranzuziehen").
+There the infinitive is the complement of a predicative, and the sentence permits instead
+of obliging. AP-05 read one such sentence in thirty as a duty (AP-05a).
+
 Deontic type and polarity are kept apart from the label, because negation does two
 different things: a negated permission is a **prohibition** ("darf nicht"), a negated
 necessity lets a duty **fall away** ("muss nicht", "braucht nicht", "nicht erforderlich").
@@ -90,6 +95,48 @@ _AUX = "ist|sind|war|waren|sei|seien|wäre|wären|hat|haben|hatte|hatten|hätte|
 _P_INFINITIV_SYNTH = re.compile(rf"\b(?i:{_AUX})\b{_GAP}{_INFINITIVE}"
                                 rf"|{_INFINITIVE}{_TAIL}\s(?i:{_AUX})\b")
 
+# -- the permission frame ------------------------------------------------------------------
+
+#: Predicates that turn ``ist/sind (es) ... , ... zu <verb>`` into a permission instead of a
+#: duty ("ist es zulässig, kürzere Mittelungszeiträume heranzuziehen"). A closed list on
+#: purpose: the frame is not recognisable by structure. "ist **sorgfältig** durchzuführen"
+#: has an adjective in the same slot and obliges; the difference is the predicate itself.
+#: Uninflected only -- predicatively German leaves the adjective bare ("ist zulässig"),
+#: attributively it inflects ("die zulässige Abweichung"), and only the first one governs
+#: an infinitive of its own.
+_PERMISSION_PREDICATE = ("zulässig|möglich|erlaubt|gestattet|statthaft|freigestellt|"
+                         "optional|nicht erforderlich|nicht notwendig|nicht zwingend")
+
+#: ``ist``/``sind``, an optional ``es``, up to two adverbs ("ist es **zudem** zulässig"),
+#: then the predicate. No comma may fall inside the frame -- it is one clause, not a
+#: sentence-wide property.
+_P_PERMISSION_FRAME = re.compile(
+    rf"\b(?:ist|sind)\b(?:\s+es\b)?(?:\s+(?!(?:{_PERMISSION_PREDICATE})\b)[a-zäöüß]+\b){{0,2}}"
+    rf"\s+(?P<pred>{_PERMISSION_PREDICATE})\b", re.I)
+
+#: "Es steht dem Betreiber frei, ... anzuwenden" -- same job, fixed wording instead of a
+#: predicate list.
+_P_FREE_CHOICE = re.compile(r"\bsteht\b(?:\s+[\wäöüß]+\b){0,3}?\s+(?P<pred>frei)\b", re.I)
+
+
+def _mask_permission_frames(s: str) -> str:
+    """Cut the auxiliary out of every permission frame, keep the predicate.
+
+    ``;`` is what the pattern above already treats as a hard boundary, so replacing the
+    auxiliary with it takes the frame out of reach for both forms of the modal infinitive
+    at once -- the analytic one ("ist es zulässig, ... zu erfassen") and the synthetic one
+    ("ist es zulässig, ... heranzuziehen"). It also cuts the link when the offending
+    auxiliary comes from another clause altogether ("... erfüllt **sind**, steht es dem
+    Betreiber frei, ... anzuwenden").
+
+    The predicate stays so that the sentence keeps being read for what it is: ``zulässig``
+    still reaches :data:`_P_DARF`, ``nicht erforderlich`` still reaches
+    :data:`_P_MUSS_NICHT`.
+    """
+    for pattern in (_P_PERMISSION_FRAME, _P_FREE_CHOICE):
+        s = pattern.sub(lambda m: " ; " + m.group("pred"), s)
+    return s
+
 # -- modal verbs -----------------------------------------------------------------------------
 
 _P_DARF_NICHT = re.compile(r"\b(darf|dürfen)\b[^.;]{0,60}?\bnicht\b|\bunzulässig\b|\bnicht zulässig\b", re.I)
@@ -106,7 +153,12 @@ _P_MUSS_NICHT = re.compile(r"\b(muss|müssen|braucht|brauchen)\b[^.;]{0,60}?\bni
 
 
 def _is_duty(s: str) -> bool:
-    """A duty stated positively -- modal verb, analytic or synthetic modal infinitive."""
+    """A duty stated positively -- modal verb, analytic or synthetic modal infinitive.
+
+    On the masked sentence: a permission frame governs the infinitive itself and leaves
+    nobody obliged.
+    """
+    s = _mask_permission_frames(s)
     return bool(_P_MUSS.search(s) or _P_INFINITIV_SYNTH.search(s))
 
 
@@ -128,11 +180,15 @@ def _classify(s: str) -> tuple[str, str]:
         return "keine", "positiv"
     if _P_DARF_NICHT.search(s):
         return "erlaubnis", "negativ"
-    waived = _P_MUSS_NICHT.search(s)
+    # The waiver is read on the masked sentence, so that the infinitive of the waiver's own
+    # frame cannot re-instate the duty it just dropped ("Es ist nicht erforderlich, die
+    # Unterlagen vorzulegen.").
+    masked = _mask_permission_frames(s)
+    waived = _P_MUSS_NICHT.search(masked)
     # A sentence may waive one duty and state another ("Ein Nachweis ist nicht
     # erforderlich, die Werte sind jedoch aufzubewahren."). The waiver only decides when
     # nothing outside its own span obliges -- losing a duty is the worse error.
-    if waived and not _is_duty(s[:waived.start()] + " " + s[waived.end():]):
+    if waived and not _is_duty(masked[:waived.start()] + " " + masked[waived.end():]):
         return "pflicht", "negativ"
     if _is_duty(s):
         return "pflicht", "positiv"
