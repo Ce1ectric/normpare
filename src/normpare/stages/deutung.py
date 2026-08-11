@@ -136,11 +136,13 @@ PIPELINE_OWNED_CHAPTER = ("section_id", "mapping_id", "_source",
 #: Pipeline-owned fields of a single interpretation.
 PIPELINE_OWNED_INTERPRETATION = ("evidence_ok", "evidence_strict", "evidence_match_chars",
                                  "evidence_fragments", "evidence_unique",
+                                 "evidence_span", "evidence_extraction",
                                  "change_index_best", "change_index_disputed")
 
 #: Pipeline-owned fields of a table or figure interpretation.
 PIPELINE_OWNED_ASSET = ("evidence_ok", "evidence_strict", "evidence_match_chars",
-                        "evidence_fragments", "evidence_unique")
+                        "evidence_fragments", "evidence_unique",
+                        "evidence_span", "evidence_extraction")
 
 
 def drop_pipeline_owned(obj: dict, fields=PIPELINE_OWNED_INTERPRETATION) -> dict:
@@ -611,8 +613,7 @@ def asset_haystack(ch: dict, o_secs: dict, n_secs: dict) -> str:
 
 def check_asset_evidence(item: dict, hay: str) -> dict:
     """Evidence guard for table/figure interpretations, see :func:`check_evidence`."""
-    ev = n2(item.get("evidence") or "").lower()
-    return {"evidence_ok": _asset_evidence_ok(ev, hay), **evidence_metrics(ev, hay)}
+    return _guarded(item.get("evidence") or "", hay, _asset_evidence_ok)
 
 
 def _asset_evidence_ok(ev: str, hay: str) -> bool:
@@ -727,6 +728,95 @@ def evidence_metrics(ev: str, hay: str) -> dict:
     }
 
 
+# ------------------------------------------------------------------ quote extraction
+# The guard used to check an answer as delivered, which measures formatting discipline
+# instead of the ability to cite: on ``out/4110_haiku`` 21.7 % of the answers passed as
+# delivered and 79.9 % once the quoted span was located -- 58 points lost to a label a
+# model puts in front of a correct quote. Under quote-first [Gua26] the *system*
+# localizes the span; it does not demand a pre-cleaned one from the model.
+#
+# Extraction runs on the n2()-normalized answer. n2 already unifies the typographic
+# quotation marks („ “ ‚ ‘ » «) into their straight equivalents, so three patterns
+# cover the six pairs -- including the mismatched ‚...' that Haiku writes in 300 of its
+# 1612 answers.
+
+#: Below this many characters a span is not drawn as a candidate. Without the floor a
+#: quote around an arbitrary word would pass: the short-quote branch of
+#: :func:`_evidence_ok` accepts a quote that covers a short record completely. The
+#: floor bounds the *extraction*; the short-quote rule itself is untouched.
+MIN_SPAN_CHARS = 15
+
+#: Quotation mark pairs after n2(): straight double, straight single, and the single
+#: guillemets, which n2 leaves alone. The character class excludes both marks, so a
+#: match ends at the first closing mark.
+_QUOTED = tuple(re.compile(re.escape(o) + "([^" + re.escape(o + c) + "]"
+                           + "{" + str(MIN_SPAN_CHARS) + ",})" + re.escape(c))
+                for o, c in (('"', '"'), ("'", "'"), ("›", "‹")))
+
+#: A label a model puts in front of its quote. Closed list; ``:`` binds directly, a
+#: dash needs spaces around it so that "Alt-Anlagen" stays a word (n2 has turned every
+#: en dash into a hyphen by the time this runs).
+_LABEL = re.compile(r"^(?:alte fassung|neue fassung|alt|neu|vorher|nachher)"
+                    r"(?::\s*|\s+[-–]\s+)", re.IGNORECASE)
+
+
+def evidence_candidates(answer: str) -> list[tuple[str, str]]:
+    """Spans of a model answer that may carry the quote, with how each was won.
+
+    In the order they are checked:
+
+    ``roh``
+        the whole answer -- what the guard did before AP-08. It stays the first
+        candidate so that an answer passing today keeps passing, with the same span
+        and the same numbers.
+    ``anfuehrung``
+        every span between quotation marks, in the order they appear. Several are
+        possible and all are checked: an answer of the form ``ALT: '...'; NEU: '...'``
+        quotes two versions, and either may be the one the record carries.
+    ``etikett``
+        the answer with a leading label removed -- only when there are no quotation
+        marks, otherwise the label already sits in front of the first span.
+
+    Spans shorter than :data:`MIN_SPAN_CHARS` are dropped; the whole answer never is.
+    """
+    text = n2(answer).strip()
+    out = [(text, "roh")]
+    quoted = sorted((m.start(), m.group(1).strip())
+                    for p in _QUOTED for m in p.finditer(text))
+    if quoted:
+        out += [(s, "anfuehrung") for _, s in quoted if len(s) >= MIN_SPAN_CHARS]
+    else:
+        stripped = _LABEL.sub("", text, count=1).strip()
+        if stripped != text and len(stripped) >= MIN_SPAN_CHARS:
+            out.append((stripped, "etikett"))
+    return out
+
+
+def _guarded(answer: str, hay: str, ok) -> dict:
+    """Run the guard over every candidate span; the first one that passes wins.
+
+    ``evidence_span`` is the span the check passed with, ``evidence_extraction`` how
+    it was won. The second field is what makes visible how often extraction was needed
+    at all: for Sonnet it is nearly always ``roh``, and a rise reports a change in the
+    model's or the prompt's shape rather than in its content.
+
+    Where no candidate passes, the one covering the most characters is reported (ties
+    to the earliest, so the whole answer wins over a span that covers no more). The
+    verdict is the same either way; this only decides which span the diagnostics
+    describe.
+    """
+    best = None
+    for span, mode in evidence_candidates(answer):
+        ev = span.lower()
+        res = {"evidence_ok": ok(ev, hay), **evidence_metrics(ev, hay),
+               "evidence_span": span, "evidence_extraction": mode}
+        if res["evidence_ok"]:
+            return res
+        if best is None or res["evidence_match_chars"] > best["evidence_match_chars"]:
+            best = res
+    return best
+
+
 def _record_haystack(c: dict) -> str:
     return " ".join(n2(c.get(k) or "").lower() for k in ("old_text", "new_text"))
 
@@ -762,15 +852,19 @@ def _evidence_unique(ev: str, deutung: dict, ch: dict) -> bool:
 def check_evidence(deutung: dict, ch: dict) -> dict:
     """Check an interpretation's quote against its change record.
 
-    Returns the five fields written into ``deutung.json``: the unchanged
-    ``evidence_ok``, the diagnostics of :func:`evidence_metrics` and
-    ``evidence_unique`` (ENT-30).
+    Returns the seven fields written into ``deutung.json``: ``evidence_ok`` (its rule
+    unchanged), the diagnostics of :func:`evidence_metrics`, ``evidence_unique``
+    (ENT-30) and the two of the extractor, ``evidence_span`` and
+    ``evidence_extraction`` (AP-08).
+
+    Every one of them is computed on the *extracted span*, not on the answer as
+    delivered -- see :func:`evidence_candidates` for why.
     """
-    ev = n2(deutung.get("evidence") or "").lower()
     hay = change_haystack(deutung, ch)
-    res = {"evidence_ok": _evidence_ok(ev, hay), **evidence_metrics(ev, hay)}
+    res = _guarded(deutung.get("evidence") or "", hay, _evidence_ok)
     res["evidence_unique"] = (res["evidence_strict"]
-                              and _evidence_unique(ev, deutung, ch))
+                              and _evidence_unique(res["evidence_span"].lower(),
+                                                   deutung, ch))
     return res
 
 
@@ -805,7 +899,10 @@ def change_index_check(deutung: dict, ch: dict) -> dict:
     none of them -- ``change_index_best`` is ``None``: naming record 0 would be an
     assertion without evidence, which is the error class this whole package closes.
     """
-    ev = n2(deutung.get("evidence") or "").lower()
+    # the span the guard settled on, not the answer as delivered: scoring the shell
+    # against every record would measure the label, and the subset relation to
+    # evidence_unique (both read the same quote) would quietly break (AP-08)
+    ev = n2(deutung.get("evidence_span") or deutung.get("evidence") or "").lower()
     scores = [evidence_metrics(ev, _record_haystack(c))["evidence_match_chars"]
               for c in ch["changes"]]
     best = max(scores, default=0)

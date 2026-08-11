@@ -162,7 +162,11 @@ def test_ellipsis_one_fragment_missing():
 def test_ellipsis_variants_are_recognised():
     results = [_check(f"alpha bravo {mark} delta echo", new=ELLIPSIS_SOURCE)
                for mark in ("…", "...", "[…]", "[...]")]
-    assert all(r == results[0] for r in results)
+    # everything but the quote itself: ``evidence_span`` is the answer (mode ``roh``
+    # for all four, none carries a shell), and the four answers differ in the mark
+    assert all({k: v for k, v in r.items() if k != "evidence_span"}
+               == {k: v for k, v in results[0].items() if k != "evidence_span"}
+               for r in results)
     assert results[0]["evidence_fragments"] == 2
     assert results[0]["evidence_strict"] is True
 

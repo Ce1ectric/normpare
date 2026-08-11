@@ -10,7 +10,10 @@ both already on disk.
 
 The recomputed ``evidence_ok`` is compared against the value stored in
 ``deutung.json``; a mismatch would mean the guard's historical branch has changed
-and is reported as such.
+and is reported as such. Since AP-08 a mismatch is expected for runs recorded before
+it: the guard now checks the *extracted span* instead of the answer as delivered, so
+an answer that wraps its quote in a label passes where the stored value says it did
+not.
 
 Interpretations whose chapter has no counterpart in ``chapters.json`` cannot be
 checked (there is no change record to check against). They are listed in the JSON
@@ -49,7 +52,8 @@ from normpare.text.textnorm import n2
 #: cross-check of the model's ``change_index`` (AP-07): the quote is scored against every
 #: change record of the chapter, not only the chosen one.
 METRICS = ("evidence_ok", "evidence_strict", "evidence_match_chars", "evidence_fragments",
-           "evidence_unique", "change_index_best", "change_index_disputed")
+           "evidence_unique", "evidence_span", "evidence_extraction",
+           "change_index_best", "change_index_disputed")
 
 
 def _has_ellipsis(ev: str) -> bool:
