@@ -16,6 +16,12 @@ Interpretations whose chapter has no counterpart in ``chapters.json`` cannot be
 checked (there is no change record to check against). They are listed in the JSON
 with ``chapter_found: false`` and excluded from every quota.
 
+The join runs over ``mapping_id`` (ENT-24), which the interpretation stage sets
+itself, and falls back to ``section_id`` for runs recorded before AP-06 -- there the
+key was whatever the model echoed, and in the 4110 run it echoed a slug of the
+heading or the value of the ``Teil`` field, which left 165 interpretations without a
+chapter.
+
 The source directory is only ever read; both output files go to ``--out``, and
 ``regression.guard_write`` refuses any target below ``out/``.
 
@@ -57,15 +63,18 @@ def collect(out_dir) -> list[dict]:
                              "deutung.json and chapters.json of a finished run.")
     deut = json.loads((out / "deutung.json").read_text(encoding="utf-8"))
     chap = json.loads((out / "chapters.json").read_text(encoding="utf-8"))
-    by_id = {c.get("id"): c for c in chap.get("chapters") or []}
+    chapters = chap.get("chapters") or []
+    by_mapping = {c["mapping_id"]: c for c in chapters if c.get("mapping_id")}
+    by_id = {c.get("id"): c for c in chapters}
 
     rows = []
     for c in deut.get("chapters") or []:
         sid = c.get("section_id")
-        ch = by_id.get(sid)
+        ch = by_mapping.get(c.get("mapping_id")) or by_id.get(sid)
         for d in (c.get("interpretations") or c.get("deutungen") or []):
             ev = n2(d.get("evidence") or "").lower()
-            row = {"section_id": sid, "change_index": d.get("change_index"),
+            row = {"section_id": sid, "mapping_id": c.get("mapping_id"),
+                   "change_index": d.get("change_index"),
                    "chapter_found": ch is not None}
             row.update(check_evidence(d, ch) if ch is not None
                        else dict.fromkeys(METRICS, None))
