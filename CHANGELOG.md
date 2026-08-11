@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Every chapter mapping carries a `mapping_id`: both sides of the mapping, each sorted,
+  written as `new<old` — `4.3<4.2` for a renumbering, `6<6.1+6.2` for a merge, `4+4.2<4`
+  for a split, `10<` for an addition, `<11` for a removal. `cid = new_id or old_id` names
+  a chapter, not a mapping: it drops one side of every merge and split, and two chapters
+  that ingest gave the same synthetic id collapse onto one key. Beyond three sources per
+  side the list is cut and a digest of the full list appended; a repeated section id gets
+  its ordinal appended (`anhang_informativ#2`). Over the 4110 pair all 220 mappings get a
+  distinct id, the longest is 51 characters and none needs an ordinal.
+  The field is additive — `old_id`, `new_id`, `old_ids` and `new_ids` all stay, and `cid`
+  remains derivable.
+- The interpretation stage sets the key of an answer itself instead of taking it from the
+  answer. The model is asked to echo `section_id`, and in the 4110 run it did not: it
+  wrote a slug of the heading (`kapitel_2_normative_verweisungen`) or, for unnumbered
+  annexes, the value of the `Teil` field (`anhang_informativ`, five times). 165
+  interpretations — 10.6 % — had no chapter left to be checked against. With the key
+  written by the stage, all 1552 are checkable; 142 of the 165 pass the evidence guard,
+  23 enter the review queue they never reached before.
+
 ### Changed
 
 - The 4110 regression baseline points at a replay of the reference run, not at the frozen
