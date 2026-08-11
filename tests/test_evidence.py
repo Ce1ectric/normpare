@@ -235,6 +235,105 @@ def test_asset_evidence_reports_the_same_four_quantities():
     assert labelled["evidence_span"] == "grenzwerte der spannung"
 
 
+# -- rendered table rows and the widened haystack ------------------------------------------
+#
+# Reviewing the 4110 run showed 40 of 49 failed asset checks were the guard's fault, not
+# the model's: 30 quotes were rendered table rows (never verbatim anywhere, the separators
+# are added for the prompt), 10 quoted the sentence referencing the figure, which the
+# haystack did not reach.
+
+ZEILE_HAY = ("tabelle 14 funktionen punkt zeit schritt vordruck "
+             "netzsicherheitsmanagement redispatch sekundaerregelleistung")
+
+
+def test_rendered_table_row_passes_when_every_cell_is_present():
+    res = check_asset_evidence({"evidence": "Punkt | Zeit | Schritt | Vordruck"}, ZEILE_HAY)
+    assert res["evidence_ok"] is True
+
+
+def test_rendered_table_row_fails_when_a_cell_is_missing():
+    res = check_asset_evidence({"evidence": "Punkt | Zeit | Bemessungsleistung"}, ZEILE_HAY)
+    assert res["evidence_ok"] is False
+
+
+def test_double_bar_is_a_separator_as_well():
+    res = check_asset_evidence({"evidence": "Punkt | Zeit ‖ Schritt | Vordruck"}, ZEILE_HAY)
+    assert res["evidence_ok"] is True
+
+
+def test_short_cells_are_dropped_not_counted():
+    """A row of nothing but short cells carries no information and must not pass."""
+    res = check_asset_evidence({"evidence": "V | 1 | kW | 2 | A"}, ZEILE_HAY)
+    assert res["evidence_ok"] is False
+
+
+def test_short_cells_do_not_veto_a_row():
+    """'V' is dropped; the remaining cells decide."""
+    res = check_asset_evidence({"evidence": "Punkt | V | Schritt | Vordruck"}, ZEILE_HAY)
+    assert res["evidence_ok"] is True
+
+
+def test_a_single_cell_is_not_a_row():
+    """Without a second cell there is nothing to corroborate -- the prose rule applies."""
+    res = check_asset_evidence({"evidence": "| netzsicherheitsmanagement"}, ZEILE_HAY)
+    assert res["evidence_ok"] is False
+
+
+def test_prose_asset_quote_is_unchanged():
+    """The parity check for the asset rule: prose still goes the verbatim way."""
+    res = check_asset_evidence({"evidence": "grenzwerte der spannung"}, ASSET_HAY)
+    assert res["evidence_ok"] is True
+    assert check_asset_evidence({"evidence": "grenzwerte der stromstaerke"},
+                                ASSET_HAY)["evidence_ok"] is False
+
+
+def test_asset_haystack_reaches_the_chapter_body():
+    """A figure interpretation may quote the sentence that references the figure."""
+    from normpare.stages.deutung import asset_haystack
+
+    satz = "Die Regelung ist innerhalb der FRT-Grenzkurven nach Bild 17 aktiv."
+    o_secs = {"10.2": {"paragraphs": [], "figures": [], "tables": []}}
+    n_secs = {"10.2": {"paragraphs": [{"n1": satz}],
+                       "figures": [{"caption": "Bild 17 FRT-Grenzkurven"}],
+                       "tables": []}}
+    ch = {"old_ids": ["10.2"], "new_ids": ["10.2"], "tables_diff": []}
+
+    hay = asset_haystack(ch, o_secs, n_secs)
+    # No dashes in the caption on purpose: n2 folds an em dash to a hyphen, and that
+    # normalisation is not what this test is about.
+    assert "bild 17 frt-grenzkurven" in hay, "the caption has to stay in the haystack"
+    assert "innerhalb der frt-grenzkurven nach bild 17 aktiv" in hay
+
+    res = check_asset_evidence({"evidence": "innerhalb der FRT-Grenzkurven nach Bild 17 aktiv"},
+                               hay)
+    assert res["evidence_ok"] is True
+
+
+def test_asset_haystack_stops_at_the_chapter():
+    """Body text of another chapter must not make a quote pass."""
+    from normpare.stages.deutung import asset_haystack
+
+    o_secs = {"10.2": {"paragraphs": [{"n1": "Der Grenzwert betraegt 110 kV."}],
+                       "figures": [], "tables": []},
+              "11.4": {"paragraphs": [{"n1": "Der Nachweis ist jaehrlich zu fuehren."}],
+                       "figures": [], "tables": []}}
+    ch = {"old_ids": ["10.2"], "new_ids": [], "tables_diff": []}
+
+    hay = asset_haystack(ch, o_secs, {})
+    assert "110 kv" in hay
+    assert "nachweis ist jaehrlich" not in hay, "chapter 11.4 must stay out"
+
+
+def test_reordered_quote_still_fails():
+    """Deliberately not covered -- see the docstring of ``_asset_evidence_ok``.
+
+    Every word is in the source, only the order differs. Accepting that would accept
+    any permutation, including one that reverses the statement.
+    """
+    res = check_asset_evidence({"evidence": "der spannung grenzwerte"}, ASSET_HAY)
+    assert res["evidence_ok"] is False
+
+
 # -- evidence_unique (ENT-30) --------------------------------------------------------------
 
 OTHER = "die pruefung erfolgt nach den vorgaben des netzbetreibers"

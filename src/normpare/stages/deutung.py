@@ -550,6 +550,16 @@ def _figs(secs: dict, ids) -> list[dict]:
     return out
 
 
+def _paras(secs: dict, ids) -> list[str]:
+    """Paragraph text of the given sections -- the body a figure caption refers to."""
+    out = []
+    for sid in ids or []:
+        s = secs.get(sid)
+        if s:
+            out += [p.get("n1") or p.get("n0") or "" for p in s.get("paragraphs") or []]
+    return out
+
+
 def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict, max_chars: int = 6500) -> str:
     """Text extract of the chapter tables (with cell contents) and figure captions,
     paired via ch['tables_diff']. Empty string if the chapter has no assets."""
@@ -596,7 +606,18 @@ def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict, max_chars: int = 
 
 
 def asset_haystack(ch: dict, o_secs: dict, n_secs: dict) -> str:
-    """Cell/caption text of all chapter tables and figures (for the evidence guard)."""
+    """Text a table or figure interpretation may quote from.
+
+    Captions and cells, **and the chapter's paragraph text**. The body belongs in here:
+    a figure interpretation legitimately quotes the sentence that references the figure
+    ("innerhalb der FRT-Grenzkurven nach Bild 17 aktiv"), and that sentence lives in the
+    running text, not in a caption. Reviewing the 4110 run showed ten such quotes present
+    verbatim in the document and rejected only because the haystack stopped at the
+    caption.
+
+    The scope stays the chapter -- wide enough for the referencing sentence, narrow
+    enough that a quote from an unrelated chapter still fails.
+    """
     om, nm = _tabmap(o_secs), _tabmap(n_secs)
     parts = []
     for td in ch.get("tables_diff") or []:
@@ -608,6 +629,7 @@ def asset_haystack(ch: dict, o_secs: dict, n_secs: dict) -> str:
                     parts.append(" ".join(r))
     for f in _figs(o_secs, ch.get("old_ids")) + _figs(n_secs, ch.get("new_ids")):
         parts.append(f.get("caption") or "")
+    parts += _paras(o_secs, ch.get("old_ids")) + _paras(n_secs, ch.get("new_ids"))
     return n2(" ".join(parts)).lower()
 
 
@@ -616,11 +638,41 @@ def check_asset_evidence(item: dict, hay: str) -> dict:
     return _guarded(item.get("evidence") or "", hay, _asset_evidence_ok)
 
 
+#: Separators a rendered table row is built from -- see :func:`_render_cells`.
+_ZELLTRENNER = re.compile(r"\s*[|‖]\s*")
+
+#: Below this length a cell says nothing: "V", "1", "kW" match almost any table.
+_ZELLE_MIN = 3
+
+
 def _asset_evidence_ok(ev: str, hay: str) -> bool:
-    """The historical asset rule -- kept unchanged (40-character probe)."""
+    """Whether a table or figure quote is covered by ``hay``.
+
+    Two shapes have to pass, and they need different treatment:
+
+    *Prose* -- a sentence from a caption or from the body. Checked verbatim, as before
+    (whole quote, or its first 40 characters).
+
+    *A rendered table row* -- ``"Punkt | Zeit | Schritt | V"``. This never occurs
+    verbatim anywhere: the separators are added when the table is rendered for the
+    prompt, the source only has the cells. Such a quote is split again and every cell
+    of at least three characters has to be present. Shorter cells are dropped rather
+    than counted -- "V" or "1" matches nearly any table and would let a wrong row pass.
+
+    Deliberately **not** covered: a quote whose words all occur but in a different order.
+    German moves the verb ("... reagieren müssen" versus "müssen ... reagieren"), and the
+    model sometimes normalises it. Accepting that would mean accepting any permutation,
+    including one that reverses the statement. Those stay a failed check and land in the
+    review queue, where quote and source sit side by side.
+    """
     if len(ev) < 8:
         return False
-    return ev in hay or ev[:40] in hay
+    if ev in hay or ev[:40] in hay:
+        return True
+    zellen = [z for z in (s.strip() for s in _ZELLTRENNER.split(ev)) if len(z) >= _ZELLE_MIN]
+    if len(zellen) < 2:
+        return False
+    return all(z in hay for z in zellen)
 
 
 def build_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str,
