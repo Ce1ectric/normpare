@@ -2,7 +2,7 @@
  "artifacts": {
   "alt/norm_doc.json": {
    "bytes": 16998,
-   "sha256": "600598466930e56d6a152ad70aad01f57ad3341ef7056ad1240c28f20a33c397"
+   "sha256": "69a4a8c637815e090574eddeaf671705dc9c66d4b85ebd18aca352c88750f167"
   },
   "chapters.json": {
    "bytes": 21200,
@@ -18,7 +18,7 @@
   },
   "neu/norm_doc.json": {
    "bytes": 17220,
-   "sha256": "1a519219e370f6e83afbb8c8bbe1b84f38a0fdcb85a6c798f29b79740de800ce"
+   "sha256": "be87ce95ced8c749516b54e0905abafc2a9671f69435f1b5895e6caca7673dbc"
   },
   "statistics.json": {
    "bytes": 1076,
@@ -29,7 +29,7 @@
    "sha256": "333d875cf65e8326caa335a85c542bdfad68afce483fd140b8da22d523687922"
   }
  },
- "created": "2026-08-11T09:19:21Z",
+ "created": "2026-08-11T17:36:03Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "baselines/synthetic",

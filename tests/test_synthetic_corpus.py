@@ -305,3 +305,35 @@ def test_every_interpretation_finds_its_chapter(synthetic_run, tmp_path):
         assert ch is not None, f"interpretation {d.get('mapping_id')!r} has no chapter"
         assert ch["change_overview"] == d["change_overview"], \
             f"chapter {ch['mapping_id']} carries the interpretation of another chapter"
+
+
+# -- reproducibility of the generated DOCX ------------------------------------------------
+
+def test_generated_docx_is_byte_reproducible(tmp_path, load_tool, synthetic_dir):
+    """Two builds from the same Markdown must yield identical files.
+
+    A DOCX is a ZIP, and both the archive entries and the document's core properties
+    carry timestamps. Without pinning them, every rebuild changes ``source.sha256`` in
+    ``norm_doc.json`` and the tracked baseline goes red for no reason -- a harness that
+    cries wolf stops being read.
+    """
+    import hashlib
+
+    build = load_tool("build_synthetic")
+    for name in ("alt", "neu"):
+        erst = build.build_docx(synthetic_dir / f"{name}.md", tmp_path / "a" / f"{name}.docx")
+        zweit = build.build_docx(synthetic_dir / f"{name}.md", tmp_path / "b" / f"{name}.docx")
+        h1 = hashlib.sha256(erst.read_bytes()).hexdigest()
+        h2 = hashlib.sha256(zweit.read_bytes()).hexdigest()
+        assert h1 == h2, f"{name}.docx is not reproducible: {h1[:16]} != {h2[:16]}"
+
+
+def test_generated_docx_carries_no_build_time(tmp_path, load_tool, synthetic_dir):
+    """No archive entry may carry a timestamp other than the pinned one."""
+    import zipfile
+
+    build = load_tool("build_synthetic")
+    pfad = build.build_docx(synthetic_dir / "alt.md", tmp_path / "alt.docx")
+    with zipfile.ZipFile(pfad) as zf:
+        zeiten = {info.date_time for info in zf.infolist()}
+    assert zeiten == {(1980, 1, 1, 0, 0, 0)}, f"unpinned timestamps in the archive: {zeiten}"

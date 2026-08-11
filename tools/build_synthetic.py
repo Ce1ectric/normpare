@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import zipfile
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -127,8 +129,49 @@ def _list_item(paragraph) -> None:
     paragraph._p.get_or_add_pPr().append(num_pr)
 
 
+#: Fixed point in time for every timestamp in the generated DOCX.
+#: 1980-01-01 is the earliest date the ZIP format can express.
+_EPOCH = datetime(1980, 1, 1, 0, 0, 0)
+
+
+def _freeze_properties(doc) -> None:
+    """Pin the document's core properties, which otherwise carry the build time."""
+    props = doc.core_properties
+    props.created = _EPOCH
+    props.modified = _EPOCH
+    props.last_modified_by = ""
+    props.revision = 1
+
+
+def _freeze_zip(path: Path) -> None:
+    """Rewrite the DOCX with a fixed timestamp on every archive entry.
+
+    A DOCX is a ZIP, and a ZIP stores the modification time of each entry. Those
+    timestamps make an otherwise identical build differ byte for byte, which in turn
+    changes ``source.sha256`` in ``norm_doc.json`` and breaks the tracked baseline on
+    every rebuild. Entry order and content are preserved; only the metadata is pinned.
+    """
+    with zipfile.ZipFile(path) as zf:
+        eintraege = [(info, zf.read(info.filename)) for info in zf.infolist()]
+
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+        for info, daten in eintraege:
+            neu = zipfile.ZipInfo(info.filename, date_time=_EPOCH.timetuple()[:6])
+            neu.compress_type = info.compress_type
+            neu.external_attr = info.external_attr
+            neu.internal_attr = info.internal_attr
+            neu.create_system = 0          # unabhängig vom Betriebssystem
+            zf.writestr(neu, daten)
+    tmp.replace(path)
+
+
 def build_docx(md_path, docx_path) -> Path:
-    """Write the DOCX for one Markdown edition and return its path."""
+    """Write the DOCX for one Markdown edition and return its path.
+
+    The result is byte-reproducible: repeated builds from the same Markdown yield the
+    same file, so ``baselines/synthetic.json`` stays valid across rebuilds.
+    """
     from docx import Document
 
     md_path, docx_path = Path(md_path), Path(docx_path)
@@ -144,8 +187,10 @@ def build_docx(md_path, docx_path) -> Path:
             _list_item(doc.add_paragraph(block[1], style="List Bullet"))
         else:
             doc.add_paragraph(block[1])
+    _freeze_properties(doc)
     docx_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(docx_path))
+    _freeze_zip(docx_path)
     return docx_path
 
 

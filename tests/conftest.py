@@ -72,6 +72,18 @@ def expectation() -> dict:
 
 
 @pytest.fixture(scope="session")
+def synthetic_dir() -> Path:
+    """Directory of the synthetic corpus -- read only."""
+    return SYNTHETIC
+
+
+@pytest.fixture(scope="session")
+def load_tool():
+    """Loader for a module from ``tools/``, for tests that exercise a tool directly."""
+    return _load_tool
+
+
+@pytest.fixture(scope="session")
 def synthetic_run(tmp_path_factory) -> SimpleNamespace:
     """Build ``alt.docx``/``neu.docx`` from the Markdown and run the deterministic stages.
 
