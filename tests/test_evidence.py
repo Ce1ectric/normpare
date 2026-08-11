@@ -24,6 +24,7 @@ import pytest
 import tomllib
 
 from normpare.stages.deutung import check_asset_evidence, check_evidence
+from normpare.text.textnorm import n2
 
 # A source paragraph used by most cases. Lower case and single spaced, so that n2()
 # leaves it untouched and character counts in the expectations are literal.
@@ -91,6 +92,22 @@ PARITY_TABLE = [
 def test_evidence_ok_parity_table(label, old, new, index, evidence, expected):
     """``evidence_ok`` keeps the exact result of the historical rule in every case."""
     assert _check(evidence, old, new, index)["evidence_ok"] is expected
+
+
+@pytest.mark.parametrize("label,old,new,index,evidence,expected", PARITY_TABLE,
+                         ids=[c[0] for c in PARITY_TABLE])
+def test_parity_for_answers_without_a_shell(label, old, new, index, evidence, expected):
+    """The extractor of AP-08 does not touch an answer without a shell.
+
+    None of the 21 cases carries quotation marks or a label, so the whole answer stays
+    the only candidate: mode ``roh``, and the verdict is the one of the historical
+    rule. This is the assurance that the extractor only ever changes what it is meant
+    to change -- answers *with* a shell.
+    """
+    res = _check(evidence, old, new, index)
+    assert res["evidence_extraction"] == "roh"
+    assert res["evidence_span"] == n2(evidence).strip()
+    assert res["evidence_ok"] is expected
 
 
 # -- 2..5: strict check and covered characters ------------------------------------------
@@ -198,12 +215,20 @@ def test_asset_evidence_reports_the_same_four_quantities():
     res = check_asset_evidence({"evidence": "grenzwerte der spannung"}, ASSET_HAY)
     assert res == {"evidence_ok": True, "evidence_strict": True,
                    "evidence_match_chars": len("grenzwerte der spannung"),
-                   "evidence_fragments": 1}
+                   "evidence_fragments": 1,
+                   "evidence_span": "grenzwerte der spannung",
+                   "evidence_extraction": "roh"}
     split = check_asset_evidence({"evidence": "grenzwerte … 110 kv"}, ASSET_HAY)
     assert split["evidence_fragments"] == 2
     assert split["evidence_strict"] is True
     short = check_asset_evidence({"evidence": "kurz"}, ASSET_HAY)
     assert short["evidence_ok"] is False
+    # a table or figure quote goes through the same extractor (AP-08)
+    labelled = check_asset_evidence({"evidence": "NEU: 'grenzwerte der spannung'"},
+                                    ASSET_HAY)
+    assert labelled["evidence_ok"] is True
+    assert labelled["evidence_extraction"] == "anfuehrung"
+    assert labelled["evidence_span"] == "grenzwerte der spannung"
 
 
 # -- evidence_unique (ENT-30) --------------------------------------------------------------
