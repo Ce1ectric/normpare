@@ -303,6 +303,35 @@ def _is_non_normative(old_paras: list[dict], chapter_title) -> bool:
     return False
 
 
+#: Imbalance from which a chapter mapping counts as implausible. A mapping pairing 89 old
+#: paragraphs with 9 new ones (out/60909_2026-08) cannot be right: align_chapter pairs one
+#: to one, so the old surplus is reported as "removed" regardless of the text.
+UNBALANCED_MIN = 0.6
+#: Below this many paragraphs on the larger side the imbalance carries no weight -- 1 vs. 0
+#: is fully imbalanced and says nothing.
+BALANCE_MIN_SIZE = 5
+
+
+def paragraph_balance(old_sec_list: list[dict], new_sec_list: list[dict]) -> dict:
+    """Paragraph mass of both sides of a chapter mapping -- a measurement, not a filter.
+
+    Counts the same paragraphs the aligner sees (``align.paras._paras``: non-empty text,
+    comparable kind), so ``old_surplus`` is exactly the number of old paragraphs that the
+    one-to-one assignment cannot pair and therefore has to report as ``removed``.
+    Nothing here changes the change stream; ``unbalanced`` only marks the mapping.
+    """
+    # local import: keeps this module free of the numpy import that align.paras carries
+    from .align.paras import _paras
+
+    n_old = sum(len(_paras(s)) for s in old_sec_list)
+    n_new = sum(len(_paras(s)) for s in new_sec_list)
+    larger = max(n_old, n_new)
+    imbalance = round(abs(n_old - n_new) / larger, 4) if larger else 0.0
+    return {"n_old": n_old, "n_new": n_new, "imbalance": imbalance,
+            "old_surplus": max(0, n_old - n_new),
+            "unbalanced": imbalance >= UNBALANCED_MIN and larger >= BALANCE_MIN_SIZE}
+
+
 def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str | Path,
                   pair_label: str) -> dict:
     o_secs = {s["id"]: s for s in old_doc["sections"]}
@@ -315,6 +344,9 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
         mt = rec["match_type"]
         old_ids = rec.get("old_ids") or ([rec["old_id"]] if rec.get("old_id") else [])
         new_ids = rec.get("new_ids") or ([rec["new_id"]] if rec.get("new_id") else [])
+        old_sec_list = [o_secs[i] for i in old_ids if i in o_secs]
+        new_sec_list = [n_secs[i] for i in new_ids if i in n_secs]
+        balance = paragraph_balance(old_sec_list, new_sec_list)
         ch = {"mapping_id": rec.get("mapping_id") or mapping_id(old_ids, new_ids),
               "old_id": rec.get("old_id"), "new_id": rec.get("new_id"),
               "old_ids": old_ids, "new_ids": new_ids,
@@ -323,6 +355,7 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
               "part": rec.get("new_part") or rec.get("old_part"),
               "part_changed": rec.get("part_changed", False),
               "mode": mt, "map_confidence": rec.get("confidence"),
+              "paragraph_balance": balance,
               "changes": [], "n_identical": 0}
 
         if mt == "new":
@@ -365,8 +398,12 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
                     continue
                 ch["changes"].append(c)
 
-        old_sec_list = [o_secs[i] for i in old_ids if i in o_secs]
-        new_sec_list = [n_secs[i] for i in new_ids if i in n_secs]
+        if balance["unbalanced"]:
+            # marking only: the deletion stays in the stream, it just says where it comes from
+            for c in ch["changes"]:
+                if c["kind"] == "removed":
+                    c["from_unbalanced_mapping"] = True
+
         ch["formulas_diff"] = formulas_diff(old_sec_list, new_sec_list)
         ch["tables_diff"] = tables_diff(old_sec_list, new_sec_list, sim_backend)
         chapters.append(ch)
