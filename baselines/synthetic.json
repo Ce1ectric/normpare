@@ -5,8 +5,8 @@
    "sha256": "69a4a8c637815e090574eddeaf671705dc9c66d4b85ebd18aca352c88750f167"
   },
   "chapters.json": {
-   "bytes": 21200,
-   "sha256": "3b1be73be8f9934ff1932518f8c8377a79a8e788cb616d5afb643f4a941a4914"
+   "bytes": 21310,
+   "sha256": "b1c3c3f9f0dce6d466a4345f3fc1262f50a8d07557bb59ddd0a284602a60c59b"
   },
   "keywords.json": {
    "bytes": 726,
@@ -20,16 +20,20 @@
    "bytes": 17220,
    "sha256": "be87ce95ced8c749516b54e0905abafc2a9671f69435f1b5895e6caca7673dbc"
   },
+  "review_removed.json": {
+   "bytes": 253,
+   "sha256": "fdfc0e688de4dac49616e16a5b91149c33f7ef3f8fbc821603df17c6f3309d3c"
+  },
   "statistics.json": {
    "bytes": 1076,
    "sha256": "c66cef209b0b1c0f614d55cd082413e2af726324e136bc693d448bd3f355813c"
   },
   "synopse.json": {
-   "bytes": 19294,
-   "sha256": "2c89126073269dced26c826c26aae8b70bfe2672403abcb3075c63140ca90c07"
+   "bytes": 19404,
+   "sha256": "b478ef546a44e2b86c67799f4ae4b7929e9653f2029b08b2e65b608f5c66105e"
   }
  },
- "created": "2026-08-12T13:13:27Z",
+ "created": "2026-08-12T20:01:25Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "baselines/synthetic",
