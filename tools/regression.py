@@ -56,6 +56,8 @@ NOT_COMPARED = {
     "*.docx": "Word writes a creation timestamp into the package",
     "*.pptx": "same as .docx",
     "*.html": "carries the generation timestamp",
+    "Pruefliste_entfallen_*.md": "readable rendering of review_removed.json, which is "
+                                 "compared; its name depends on the run name",
 }
 
 #: Artifacts compared byte for byte -- everything that is produced without an LLM.
@@ -64,6 +66,7 @@ ARTIFACTS = (
     "chapters.json",
     "keywords.json",
     "mapping.json",
+    "review_removed.json",
     "statistics.json",
     "synopse.json",
     "alt/norm_doc.json",

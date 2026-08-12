@@ -123,13 +123,16 @@ class Pipeline:
 
     def synopse(self) -> None:
         from .stages.diff import build_synopse
+        from .stages.review_removed import write_review_removed
         from .text.similarity import load_backend
         old = _load(self.out / "alt" / "norm_doc.json", "ingest")
         new = _load(self.out / "neu" / "norm_doc.json", "ingest")
         mapping = _load(self.out / "mapping.json", "align")
         backend = load_backend(self.cfg.similarity)
-        build_synopse(old, new, mapping["records"], backend,
-                      self.out / "synopse.json", self.cfg.pair_label)
+        syn = build_synopse(old, new, mapping["records"], backend,
+                            self.out / "synopse.json", self.cfg.pair_label)
+        # the removals worth a second look -- deterministic, so it is complete with --no-llm
+        write_review_removed(syn, self.out / "review_removed.json")
 
     def keywords(self) -> None:
         from .stages.keywords import assign_keywords
@@ -157,6 +160,7 @@ class Pipeline:
         from .report.dossier_report import build_dossier
         from .report.html import build_annotated_html
         from .report.pptx import build_pptx
+        from .report.review_list import build_review_list
         from .report.stats import build_statistics
         from .report.synopse_det import build_docx_synopse
         from .report.synopse_final import build_final_synopse
@@ -178,3 +182,5 @@ class Pipeline:
         if deut is not None:
             build_final_synopse(syn, deut, self.out / f"Synopse_final_{run}.docx", pair)
         build_pptx(syn, deut, stats, self.out / f"Aenderungen_{run}.pptx", pair)
+        # the readable side of review_removed.json (AP-11); needs no interpretation
+        build_review_list(syn, new, self.out / f"Pruefliste_entfallen_{run}.md", pair)

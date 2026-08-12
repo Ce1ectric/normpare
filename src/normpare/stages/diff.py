@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .align.sections import mapping_id
 from .enrich import modality, refs, values
+from .review_removed import annotate_relocation
 from ..text.textnorm import compare_key, garbage_ratio, n1, n2, n3
 
 _TOKEN = re.compile(r"(\s+|[.,;:!?(){}\[\]/–—„“”\"'])")
@@ -407,6 +408,10 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
         ch["formulas_diff"] = formulas_diff(old_sec_list, new_sec_list)
         ch["tables_diff"] = tables_diff(old_sec_list, new_sec_list, sim_backend)
         chapters.append(ch)
+
+    # AP-11: where a removed text stands in the new edition, and whether that section was
+    # in reach of the aligner. A marking on the record, nothing is filtered by it.
+    annotate_relocation(chapters, new_doc)
 
     from collections import Counter
     counts = Counter(c["kind"] for ch in chapters for c in ch["changes"])
