@@ -33,7 +33,8 @@ REASON_TEXT = {
         "die Paarung misslang (Absatz-Aligner)",
     "unbalanced_mapping":
         f"die Zuordnung bringt mindestens {OLD_SURPLUS_MIN} Alt-Absätze mehr ein, "
-        "als sie Neu-Absätze hat (AP-09)",
+        "als sie Neu-Absätze hat (AP-09) — bringt allein niemanden auf die Liste, "
+        "sortiert sie aber (AP-12)",
 }
 
 
@@ -76,9 +77,11 @@ def render_review_list(entries: list[dict], pair: str, new_doc: dict | None = No
     lines = [
         f"# Prüfliste entfallener Text — {pair}",
         "",
-        f"{len(entries)} Entfallen-Meldungen sind einen zweiten Blick wert. Keine davon "
-        "ist aus dem",
-        "Änderungsstrom entfernt oder umgewichtet — diese Liste markiert, sie filtert nicht.",
+        f"{len(entries)} Entfallen-Meldungen sind einen zweiten Blick wert: für jede "
+        "steht der Text",
+        "nachweislich noch im neuen Dokument. Keine davon ist aus dem Änderungsstrom "
+        "entfernt",
+        "oder umgewichtet — diese Liste markiert, sie filtert nicht.",
         "",
         "| Grund | Fälle | Bedeutung |",
         "|---|---:|---|",

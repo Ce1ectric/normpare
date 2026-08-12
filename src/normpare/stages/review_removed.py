@@ -16,6 +16,12 @@ this way, none of them with a coverage of 1.00 -- every relocated span was rewor
 the way, which is exactly why the 15-character prefix rule of ``tools/removed_audit.py``
 never found them.
 
+The two are not, however, equal partners. AP-11 built the list on either signal and got
+111 / 149 / 136 entries per corpus, 95,5 % / 98,7 % / 100 % of them resting on the
+surplus alone -- a list nobody reads. Since AP-12 the surplus no longer admits anything
+(:data:`ADMITTING_REASONS`); it remains a reason and a sort key, and the list is
+16 / 16 / 6 entries long.
+
 Nothing is suppressed, reclassified or reweighted here. The change stream stays what it
 was; :func:`annotate_relocation` adds one key to judged removals, and
 :func:`write_review_removed` writes a second artifact beside ``synopse.json``.
@@ -42,10 +48,18 @@ RELOCATION_TAU = 0.7
 #: measured it as the sharpest of the balance criteria).
 OLD_SURPLUS_MIN = 5
 
-#: The reasons for taking a removal into the list, in the order they are reported. A
-#: removal may carry several; they are all kept, because they say different things.
+#: The reasons a removal can carry, in the order they are reported. A removal may carry
+#: several; they are all kept, because they say different things.
 REVIEW_REASONS = ("relocated_outside_mapping", "missed_inside_mapping",
                   "unbalanced_mapping")
+
+#: The reasons that put a removal *on* the list. ``unbalanced_mapping`` is deliberately
+#: not among them (AP-12): the surplus correlates with 39-56 % of all removals and causes
+#: about 5 % of them, so admitting on it alone made the list a second copy of the change
+#: stream -- 95 of 111 entries on 4110 rested on the surplus and nothing else. It stays a
+#: reason on entries that earned their place, and it stays the third sort key, because it
+#: does order the list well. What it must not do is fill it.
+ADMITTING_REASONS = ("relocated_outside_mapping", "missed_inside_mapping")
 
 
 # -- coverage over word trigrams -------------------------------------------------------
@@ -146,7 +160,11 @@ def _sort_key(entry: dict) -> tuple:
 
 
 def review_entries(synopse: dict) -> list[dict]:
-    """Every judged ``removed`` report with at least one reason, in review order."""
+    """Every judged ``removed`` report with textual evidence, in review order.
+
+    Admission needs one of :data:`ADMITTING_REASONS`; ``unbalanced_mapping`` is carried
+    along on entries that got in on their own, and it still sorts them.
+    """
     entries = []
     for ch in synopse.get("chapters") or []:
         old_surplus = (ch.get("paragraph_balance") or {}).get("old_surplus") or 0
@@ -154,7 +172,7 @@ def review_entries(synopse: dict) -> list[dict]:
             if change.get("kind") != "removed" or "relocation" not in change:
                 continue
             reasons = _reasons(change, old_surplus)
-            if not reasons:
+            if not any(r in ADMITTING_REASONS for r in reasons):
                 continue
             entries.append({
                 "mapping_id": ch.get("mapping_id") or ch.get("new_id") or ch.get("old_id"),
