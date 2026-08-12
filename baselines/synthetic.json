@@ -25,11 +25,11 @@
    "sha256": "c66cef209b0b1c0f614d55cd082413e2af726324e136bc693d448bd3f355813c"
   },
   "synopse.json": {
-   "bytes": 17313,
-   "sha256": "333d875cf65e8326caa335a85c542bdfad68afce483fd140b8da22d523687922"
+   "bytes": 19294,
+   "sha256": "2c89126073269dced26c826c26aae8b70bfe2672403abcb3075c63140ca90c07"
   }
  },
- "created": "2026-08-11T17:36:03Z",
+ "created": "2026-08-12T13:13:27Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "baselines/synthetic",
