@@ -101,12 +101,14 @@ def _write_run(tmp_path: Path, old_doc: dict, new_doc: dict, synopse: dict) -> P
 
 def _demo_run(tmp_path: Path) -> Path:
     """A run holding all three verdicts at once."""
-    gone = "Die Anlage nach Nummer 7 ist vor der Inbetriebnahme vollständig zu prüfen."
-    old_doc = _doc("alt", [("A", "Kapitel alt", [DUTY, FILLER, gone])])
-    new_doc = _doc("neu", [("3", "Zugeordnetes Kapitel", [FILLER, DUTY]),
-                           ("9", "Fremdes Kapitel", [FILLER])])
-    new_doc["sections"][1]["paragraphs"].append(_para("9.p9", FILLER + " " + DUTY))
-    syn = _synopse([_chapter("3<A", ["A"], ["3"], [DUTY, gone])])
+    inside = ("Die Übergabestation wird nach den anerkannten Regeln der Technik "
+              "errichtet und jährlich durch eine Fachkraft begutachtet.")
+    gone = ("Die Anlage nach Nummer 7 ist vor der ersten Inbetriebnahme vollständig "
+            "zu prüfen und schriftlich abzunehmen.")
+    old_doc = _doc("alt", [("A", "Kapitel alt", [DUTY, inside, gone])])
+    new_doc = _doc("neu", [("3", "Zugeordnetes Kapitel", [FILLER, inside]),
+                           ("9", "Fremdes Kapitel", [FILLER, DUTY])])
+    syn = _synopse([_chapter("3<A", ["A"], ["3"], [DUTY, inside, gone])])
     return _write_run(tmp_path, old_doc, new_doc, syn)
 
 
@@ -201,5 +203,7 @@ def test_report_is_deterministic(tmp_path):
             ["--dir", str(run), "--out", str(dest), "--name", "demo"])
     for name in ("relocation_demo.txt", "faelle_demo.md"):
         assert (first / name).read_bytes() == (second / name).read_bytes()
-    # and the case list really carries the relocated case
-    assert "9" in (first / "faelle_demo.md").read_text(encoding="utf-8")
+    # and the case list really carries the relocated case, and only that one
+    faelle = (first / "faelle_demo.md").read_text(encoding="utf-8")
+    assert "gefunden in `9`" in faelle
+    assert faelle.count("\n## ") == 1
