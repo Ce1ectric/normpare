@@ -138,8 +138,13 @@ def test_missed_text_enters_with_its_own_reason(tmp_path):
     assert entries[0]["relocation"]["in_mapping"] is True
 
 
-def test_surplus_alone_is_enough(tmp_path):
-    """No text found anywhere, but the mapping carries an old surplus of five."""
+def test_surplus_alone_no_longer_enters(tmp_path):
+    """No text found anywhere, only an old surplus of five: not a finding (AP-12).
+
+    Inverts ``test_surplus_alone_is_enough`` of AP-11. The surplus correlates with 39-56 %
+    of all removals and causes about 5 % of them, so admitting on it alone turned the
+    review list into a second copy of the change stream (95 of 111 entries on 4110).
+    """
     olds, news, links = _pairs(15)
     for i in range(5):
         olds.append(_para(f"a.gone{i}", f"{GONE} Fassung {i}."))
@@ -151,12 +156,86 @@ def test_surplus_alone_is_enough(tmp_path):
     assert ch["paragraph_balance"]["old_surplus"] == OLD_SURPLUS_MIN
     # deliberately *not* unbalanced: old_surplus and the AP-09 imbalance are two criteria
     assert ch["paragraph_balance"]["unbalanced"] is False
-    entries = review_entries({"chapters": [ch]})
+    # the five removals are still in the change stream, they are just not review findings
+    assert [c["kind"] for c in ch["changes"]].count("removed") == 5
+    for change in ch["changes"]:
+        if change["kind"] == "removed":
+            assert change["relocation"]["best_score"] < RELOCATION_TAU
+    assert review_entries({"chapters": [ch]}) == []
+
+
+def test_surplus_survives_as_a_reason(tmp_path):
+    """Relocated *and* out of a surplus mapping: the surplus stays a reason (AP-12)."""
+    olds, news, links = _pairs(15)
+    for i in range(5):
+        olds.append(_para(f"a.gone{i}", f"{GONE} Fassung {i}."))
+        links.append(_removed_link(f"a.gone{i}"))
+    old_doc = _doc("alt", [_section("A", "Kapitel alt", olds)])
+    new_doc = _doc("neu", [_section("N", "Kapitel neu", news),
+                           _section("X", "Anderes Kapitel", [_para("x.p0", REWORDED)])])
+    syn = _synopse(tmp_path, old_doc, new_doc, [_record(["A"], ["N"], links)])
+
+    entries = review_entries(syn)
     assert len(entries) == 5
     for entry in entries:
-        assert entry["review_reasons"] == ["unbalanced_mapping"]
-        assert entry["relocation"]["best_score"] < RELOCATION_TAU
+        assert entry["review_reasons"] == ["relocated_outside_mapping", "unbalanced_mapping"]
         assert entry["old_surplus"] == OLD_SURPLUS_MIN
+
+
+def _surplus_case(mapping_id: str, tag: str, surplus: int) -> tuple[dict, dict, dict]:
+    """One relocated removal out of a mapping with a chosen old surplus.
+
+    The surplus is made of old paragraphs the aligner never links: they raise ``n_old``
+    without adding a removal, so the mapping carries exactly one review entry.
+    """
+    olds, news, links = _pairs(3, prefix_o=f"{tag}o", prefix_n=f"{tag}n")
+    olds.append(_para(f"{tag}o.gone", GONE))
+    links.append(_removed_link(f"{tag}o.gone"))
+    olds += [_para(f"{tag}o.pad{i}", _filler_old(100 + i)) for i in range(surplus - 1)]
+    return (_section(f"A{tag}", "Kapitel alt", olds),
+            _section(f"N{tag}", "Kapitel neu", news),
+            _record([f"A{tag}"], [f"N{tag}"], links, mapping_id=mapping_id))
+
+
+def test_surplus_still_sorts(tmp_path):
+    """Same reason, same coverage, different surplus: the surplus decides the order."""
+    o_a, n_a, rec_a = _surplus_case("N1<A1", "a", surplus=1)
+    o_b, n_b, rec_b = _surplus_case("N2<A2", "b", surplus=OLD_SURPLUS_MIN)
+    old_doc = _doc("alt", [o_a, o_b])
+    new_doc = _doc("neu", [n_a, n_b, _section("X", "Anderes", [_para("x.p0", REWORDED)])])
+    syn = _synopse(tmp_path, old_doc, new_doc, [rec_a, rec_b])
+
+    entries = review_entries(syn)
+    assert len(entries) == 2
+    assert entries[0]["relocation"]["best_score"] == entries[1]["relocation"]["best_score"]
+    assert [e["old_surplus"] for e in entries] == [OLD_SURPLUS_MIN, 1]
+    # by mapping_id alone N1<A1 would come first -- the surplus outranks it
+    assert [e["mapping_id"] for e in entries] == ["N2<A2", "N1<A1"]
+    assert entries[0]["review_reasons"] == ["relocated_outside_mapping", "unbalanced_mapping"]
+    assert entries[1]["review_reasons"] == ["relocated_outside_mapping"]
+
+
+def test_relocated_entries_are_unaffected(tmp_path):
+    """Dropping the surplus criterion touches neither the number nor the order of the
+    entries that carry textual evidence."""
+    o_a, n_a, rec_a = _surplus_case("N1<A1", "a", surplus=1)
+    o_b, n_b, rec_b = _surplus_case("N2<A2", "b", surplus=OLD_SURPLUS_MIN)
+    # a third mapping whose removals rest on the surplus alone -- these must vanish
+    olds, news, links = _pairs(15, prefix_o="co", prefix_n="cn")
+    for i in range(OLD_SURPLUS_MIN):
+        olds.append(_para(f"co.gone{i}", f"Der Netzbetreiber fordert den Nachweis "
+                                        f"nach Abschnitt {i} binnen vier Wochen an."))
+        links.append(_removed_link(f"co.gone{i}"))
+    rec_c = _record(["Ac"], ["Nc"], links, mapping_id="N3<A3")
+    old_doc = _doc("alt", [o_a, o_b, _section("Ac", "Kapitel alt", olds)])
+    new_doc = _doc("neu", [n_a, n_b, _section("Nc", "Kapitel neu", news),
+                           _section("X", "Anderes", [_para("x.p0", REWORDED)])])
+    syn = _synopse(tmp_path, old_doc, new_doc, [rec_a, rec_b, rec_c])
+
+    entries = review_entries(syn)
+    assert [(e["mapping_id"], e["old_ids"]) for e in entries] == [
+        ("N2<A2", ["bo.gone"]), ("N1<A1", ["ao.gone"])]
+    assert all("relocated_outside_mapping" in e["review_reasons"] for e in entries)
 
 
 def test_unremarkable_removals_stay_out(tmp_path):
