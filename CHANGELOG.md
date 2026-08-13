@@ -78,6 +78,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- A PDF line is now read left to right instead of in drawing order. PyMuPDF returns the
+  spans of a line in content-stream order, and in DIN EN 60909-0:2016 a subscript is drawn
+  *before* its base glyph, so joining the spans as they arrive turned `i_p` into `"pi"`,
+  `R_Gf` into `"Gf R"` and `I_k` into `"kI"`. The spans are now sorted by x before their
+  text is joined; the sort is stable, so spans at the same x keep their order, and
+  `size`, `bold`, `fonts` and `bbox` keep being formed over all spans. Measured over four
+  PDF sources: 82 of 8738 lines change in the 2016 edition of 60909, 66 of 12197 in the
+  2026 edition, 4 of 15396 in 4110 and 9 of 12185 in 4120, and every one of them is a
+  correction. Section count, section ids, titles and the paragraph count per section are
+  unchanged in all four.
 - A passage that survived into a merged successor paragraph is no longer reported as
   removed. Where two old paragraphs become one new one and the first is already paired,
   the merge pass finds no free window and the second was reported as dropped — a claim
