@@ -111,6 +111,18 @@ def _parse_toc(doc, doc_title: str = "") -> list[dict]:
     return out
 
 
+def _line_text(spans) -> str:
+    """A line's text in reading order.
+
+    PyMuPDF returns the spans of a line in content-stream order, which is the order the
+    glyphs are drawn in, not the order they are read in: in DIN EN 60909-0:2016 the
+    subscript of i_p is drawn before its base glyph, so a plain join yields "pi"
+    (likewise "Gf R" for R_Gf, "kI" for I_k). Sorting by x restores the reading order.
+    The sort is stable, so spans at the same x keep the order PyMuPDF delivered them in.
+    """
+    return "".join(s["text"] for s in sorted(spans, key=lambda s: s["bbox"][0]))
+
+
 def _collect_lines(doc) -> tuple[list[dict], set[str]]:
     """All text lines with position/font; detects headers/footers via repetition."""
     lines = []
@@ -122,7 +134,7 @@ def _collect_lines(doc) -> tuple[list[dict], set[str]]:
             if b.get("type") != 0:
                 continue
             for ln in b["lines"]:
-                text = "".join(s["text"] for s in ln["spans"])
+                text = _line_text(ln["spans"])
                 if not text.strip():
                     continue
                 y0 = ln["bbox"][1]
