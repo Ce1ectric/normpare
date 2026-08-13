@@ -12,7 +12,6 @@ so no real standard and no fixture is involved.
 from __future__ import annotations
 
 import fitz
-import pytest
 
 from normpare.stages.ingest import pdf
 from normpare.stages.ingest.pdf import _collect_lines, read_pdf
