@@ -8,6 +8,37 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Four orthogonal axes on every interpretation, next to the two fields they will
+  eventually replace (ENT-01): `structural_operation` (A), `semantic_status` (B),
+  `normative_direction` (C) and `affected_components` (D). The flat `semantic_label`
+  mixes all three of them, and it is measurable: over the 1749 interpretations of the
+  4110 run, `restricted` splits 14 / 15 / 13 over `tightened` / `relaxed` / `unchanged`
+  — "the *scope* was restricted" (a relaxation for whoever is bound) and "the
+  *requirement* was restricted" (a tightening) are the same value today. Another 84
+  interpretations claim a duty appeared or fell away and report `unchanged` with it.
+  Together 126 of 1749 = 7.2 % contradict themselves.
+  Axis A is **pipeline-owned**: derived from the change record's `kind`, never asked of
+  the model, and a supplied value is discarded and counted like any other pipeline-owned
+  field. Axes B, C and D have closed vocabularies; `narrowed` replaces `restricted` and
+  is a statement about scope only, `not_applicable` gives non-normative text a direction
+  of its own instead of forcing it into `unchanged`. Axis D is multi-valued, most
+  important first, and accepts `other:<short label>` where nothing fits — every use is
+  reported with its chapter, which is how the proposed vocabulary gets corrected.
+  A value outside its vocabulary, and a missing field, are **discarded and counted, never
+  corrected**: reading `restricted` as `narrowed` would measure the correction instead of
+  the model. `semantic_label` and `obligation` keep running unchanged, so one run
+  collects both readings on the same chapters.
+- Abstention on axes B and C (ENT-02): `indeterminate` with a reason code from
+  `no_evidence | ambiguous_scope | conflicting_signals | outside_text`. An abstention
+  without a valid code is not an abstention — the axis is emptied and counted. Axis D
+  has no abstention: which component is affected is a question about the text, not a
+  judgement that can be left open.
+- `tools/axis_report.py` measures the result over a finished run, offline and without an
+  LLM: the cross table B × C, the share of self-contradictory combinations under both
+  schemas (the rules are constants of the module, and the old ones reproduce the 7.2 % of
+  the 4110 run exactly), the spread of `narrowed` over axis C, the migration table
+  `semantic_label` × `semantic_status`, axis D with every `other:` value, and the
+  abstention codes including their overlap with the old `restricted`.
 - Field ownership in the interpretation stage: every field the pipeline knows itself is
   now set by the pipeline, and a value the model supplies for such a field is **discarded
   and counted** instead of silently overwritten. The counts go into `pipeline_feedback`
@@ -52,6 +83,13 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The interpretation prompt describes the four new axes and says explicitly that
+  `narrowed` is about scope and never about strictness — that confusion is what produced
+  the defect — and it invites an honest `indeterminate` over a forced label. This makes a
+  chapter prompt 862 characters longer (+11.95 % of the 7212-character mean of the 60909
+  run) and the system prompt 447 characters longer. Since the answer cache is keyed by
+  model, system prompt and user prompt, **every cached answer of an earlier run is out of
+  reach**: a schema change means a full run, by construction.
 - The 4110 regression baseline points at a replay of the reference run, not at the frozen
   July run itself. The frozen run never changes and the code does, so every approved
   improvement moved the two further apart and was reported as a regression; a harness that
