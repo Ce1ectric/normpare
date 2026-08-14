@@ -435,9 +435,11 @@ def render_comparison(runs: list[dict]) -> str:
 
     # 4. axis D side by side -- where a connection rule differs from a calculation standard
     L += ["", "4. affected_components (D), per run: count and share of interpretations"]
-    for c in _union(runs, lambda r: r["summary"]["components"], AFFECTED_COMPONENTS):
-        L += [_row(str(c), counts(lambda r, c=c: r["summary"]["components"][c]),
-                   indent="      ")]
+    for c in AFFECTED_COMPONENTS:
+        if any(r["summary"]["components"][c] for r in runs):
+            L += [_row(c, counts(lambda r, c=c: r["summary"]["components"][c]),
+                       indent="      ")]
+    # the free values are summed up here and listed one by one in section 5
     L += [_row("other:*", counts(_other_total), indent="      ")]
 
     # 5. every other: value of every run, in one list, with the run it comes from
