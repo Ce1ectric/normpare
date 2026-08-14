@@ -420,3 +420,26 @@ def test_comparison_is_deterministic(axis_report, tmp_path, capsys):
     assert _run_report(axis_report, capsys, a, b) == _run_report(axis_report, capsys, a, b)
     runs = [axis_report.load(a), axis_report.load(b)]
     assert axis_report.render_comparison(runs) == axis_report.render_comparison(runs)
+
+
+def test_a_run_with_the_german_field_schema_is_marked_too(axis_report, tmp_path, capsys):
+    """A run from before the English schema has no old labels either -- and says so.
+
+    ``out/4110_haiku`` carries ``semantic_label: "erweitert"``. Counting the old
+    contradiction rules over it yields a clean 0.0 %, which is not a measurement but the
+    absence of the field the rule reads. The same reasoning as for the new axes applies:
+    a column that cannot be measured says so instead of showing a number.
+    """
+    german = _run_dir(tmp_path, [{"change_index": 0, "semantic_label": "erweitert",
+                                  "verbindlichkeit": "unverändert"}], name="haiku")
+    english = _run_dir(tmp_path, [_interpretation()], name="neu")
+
+    assert axis_report.load(german)["has_labels"] is False
+    assert axis_report.load(english)["has_labels"] is True
+
+    comparison = axis_report.render_comparison([axis_report.load(german),
+                                                axis_report.load(english)])
+    old_schema = next(ln for ln in comparison.splitlines()
+                      if ln.strip().startswith("old schema"))
+    assert axis_report.NO_LABELS in old_schema
+    assert "0.0 %" not in old_schema.split(axis_report.NO_LABELS)[0]
