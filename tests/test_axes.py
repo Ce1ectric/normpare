@@ -335,6 +335,30 @@ def test_old_fields_are_untouched(tmp_path):
     assert d["affected_components"] is None
 
 
+def test_the_report_stage_is_unaffected(tmp_path):
+    """The report keeps reading ``semantic_label``; the axes ride along unread.
+
+    A characterization test: it is green from the start by design, because the promise
+    of the additive introduction is that nothing downstream changes. Displaying the axes
+    is a package of its own -- what is guarded here is that they can already be written
+    into ``deutung.json`` without touching a single line of the report.
+    """
+    from normpare.report.synopse_final import _build_entries
+
+    out = _run(tmp_path, _answer())
+    written = json.loads((tmp_path / "out" / "deutung.json").read_text(encoding="utf-8"))
+    d = written["chapters"][0]["interpretations"][0]
+    assert d["structural_operation"] == "modified"      # the axes reach the file ...
+    assert d["affected_components"] == ["deadline", "proof_obligation"]
+
+    synopse = {"chapters": [{"new_id": "1", "old_id": "1", "title": "Betrieb"}]}
+    entries = _build_entries(synopse, out)
+    change = entries[0]["changes"][0]
+    assert change["label"] == "restricted"              # ... and change nothing there
+    assert change["binding"] == "tightened"
+    assert set(change) == {"label", "binding", "text", "impact"}
+
+
 # -- 9: the prompt asks for the new axes and not for the pipeline's -----------------------
 
 def test_the_prompt_describes_the_new_axes(tmp_path):
