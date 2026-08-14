@@ -54,21 +54,19 @@ def _report(axis_report, out_dir: Path, label: str = "out/run") -> str:
 
 # -- the contradiction rules --------------------------------------------------------------
 
-def test_contradiction_rules_catch_the_known_cases(axis_report, tmp_path):
-    """The three rules of AP-14, part 3, each on its own case -- and a clean row.
+def test_the_remaining_contradiction_rules_still_fire(axis_report, tmp_path):
+    """The two rules AP-16 keeps, each on its own case -- and a clean row.
 
     The rules are a constant of the module, not a shape of the output: the share they
     produce is the success measure of the whole package, so it has to be readable in
-    one place.
+    one place. They stayed because both halves of each pair contradict each other by
+    definition: an equivalent statement cannot move a duty, and it cannot move a proof
+    obligation either. On the first two runs they fired 8 / 14 and 1 / 2 times.
     """
     cases = {
         # equivalent statement, yet the duty is said to change
         "equivalent_but_directed": _interpretation(semantic_status="equivalent",
                                                    normative_direction="tightened"),
-        # non-normative text that nevertheless touches a normative component
-        "not_applicable_with_component": _interpretation(
-            semantic_status="clarified", normative_direction="not_applicable",
-            affected_components=["proof_obligation"]),
         # the statement is unchanged, yet a proof obligation is affected
         "equivalent_with_proof_obligation": _interpretation(
             semantic_status="equivalent", normative_direction="unchanged",
@@ -91,9 +89,46 @@ def test_contradiction_rules_catch_the_known_cases(axis_report, tmp_path):
     out = _run_dir(tmp_path, list(cases.values()) + [clean])
     rows = axis_report.collect(out)
     summary = axis_report.summarize(rows)
-    assert summary["contradictory"] == 3
-    assert summary["contradictory_pct"] == 75.0
-    assert summary["interpretations"] == 4
+    assert summary["contradictory"] == 2
+    assert summary["contradictory_pct"] == 66.67
+    assert summary["interpretations"] == 3
+    assert summary["by_rule"] == {"equivalent_but_directed": 1,
+                                  "equivalent_with_proof_obligation": 1}
+
+
+def test_not_applicable_with_component_is_no_longer_flagged(axis_report, tmp_path):
+    """Non-normative text may well touch a component -- the rule was wrong (AP-16).
+
+    It produced 569 of 589 reported contradictions on 4110 and 712 of 715 on 60909, and
+    every sample of it was sound: axis D says **what** a change is about, axis C whether
+    a duty moves. The rule equated the two and so broke the orthogonality ENT-01 exists
+    to establish. It is dropped without replacement, not weakened.
+    """
+    names = [name for name, _ in axis_report.CONTRADICTIONS]
+    assert "not_applicable_with_component" not in names
+
+    # the two samples quoted in the evaluation, rebuilt as rows
+    title_of_a_referenced_standard = _interpretation(
+        semantic_status="clarified", normative_direction="not_applicable",
+        affected_components=["reference"])
+    vde_bracket_removed = _interpretation(
+        semantic_status="equivalent", normative_direction="not_applicable",
+        affected_components=["reference"])
+    for row in (title_of_a_referenced_standard, vde_bracket_removed):
+        assert axis_report.contradictions(row) == []
+
+    # a normative component under not_applicable is no contradiction either
+    assert axis_report.contradictions(_interpretation(
+        semantic_status="clarified", normative_direction="not_applicable",
+        affected_components=["proof_obligation"])) == []
+
+    out = _run_dir(tmp_path, [title_of_a_referenced_standard, vde_bracket_removed])
+    summary = axis_report.summarize(axis_report.collect(out))
+    assert summary["contradictory"] == 0
+    assert summary["contradictory_pct"] == 0.0
+
+    # and the rule is gone from the report, where its count used to be printed
+    assert "not_applicable_with_component" not in _report(axis_report, out)
 
 
 def test_the_legacy_share_is_measured_on_the_same_run(axis_report, tmp_path):
@@ -215,6 +250,12 @@ def test_a_run_without_deutung_is_refused(axis_report, tmp_path):
 #: ``runs/AP-15_2026-08-14/skripte/golden_capture.py``. One ``--dir`` has to keep
 #: producing this character for character -- the comparison view is an addition, not a
 #: rewrite, and every earlier report has to stay comparable to a new one.
+#:
+#: AP-16 changed exactly one line of it: the count of ``not_applicable_with_component``,
+#: because the rule was dropped. Section 2 enumerates :data:`CONTRADICTIONS`, so a rule
+#: that no longer exists cannot keep a line here. Nothing else about the layout moved --
+#: section 5 keeps listing the values a run actually used, and the five new ones appear
+#: there as soon as a run uses them.
 GOLDEN_SINGLE = r"""axis report -- out/run
 normpare {version}, recomputed offline (no LLM, no network)
 
@@ -233,7 +274,6 @@ interpretations                      5
 2. self-contradictory combinations
   four axes         0 / 5 = 0.0 %
       equivalent_but_directed                0
-      not_applicable_with_component          0
       equivalent_with_proof_obligation       0
   old schema        2 / 5 = 40.0 %   (the ~7 % of the 4110 run, recomputed here)
       restricted_ambiguous                   1
@@ -407,11 +447,44 @@ def test_component_counts_are_side_by_side(axis_report, tmp_path, capsys):
     assert "2" in line and "66.67" in line         # 2 of 3 in the second
 
 
+def test_report_counts_the_new_components(axis_report, tmp_path):
+    """Axis D shows all fifteen values per run, a value nobody used included.
+
+    A zero is the measurement here: whether the five values AP-16 added are picked up at
+    all is exactly what the next run has to answer, and a row that disappears when the
+    count is zero cannot be told from a value that was never offered. In the comparison
+    the rows also have to line up across runs, which they only do if every run carries
+    every row.
+    """
+    a = _run_dir(tmp_path, [_interpretation(affected_components=["formula", "note"])],
+                 name="a4110")
+    b = _run_dir(tmp_path, [_interpretation(affected_components=["scope"])],
+                 name="b60909")
+
+    comparison = axis_report.render_comparison([axis_report.load(a), axis_report.load(b)])
+    lines = {}
+    for value in axis_report.AFFECTED_COMPONENTS:
+        line = [ln for ln in comparison.splitlines()
+                if ln.strip().split(" ")[0] == value]
+        assert len(line) == 1, value          # exactly one row per value, always
+        lines[value] = line[0]
+
+    assert len(lines) == 15
+    assert "1 = 100.0 %" in lines["formula"] and "0 = 0.0 %" in lines["formula"]
+    assert "1 = 100.0 %" in lines["note"]
+    assert "1 = 100.0 %" in lines["scope"]
+    # the three nobody used are carried with a zero instead of vanishing
+    for unused in ("heading", "caption", "example"):
+        assert lines[unused].count("0 = 0.0 %") == 2, unused
+
+
 def test_comparison_is_deterministic(axis_report, tmp_path, capsys):
     """The same call twice yields character-identical output, comparison included."""
     rows = [_interpretation(affected_components=["other:Zeta", "scope"]),
             _interpretation(semantic_status="equivalent", normative_direction="tightened",
                             affected_components=["other:Alpha", "limit_value"]),
+            _interpretation(semantic_status="clarified", normative_direction="unchanged",
+                            affected_components=["formula", "caption", "example"]),
             _interpretation(semantic_status=None, normative_direction=None,
                             affected_components=None)]
     a = _run_dir(tmp_path, rows, name="a")

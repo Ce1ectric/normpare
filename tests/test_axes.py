@@ -45,6 +45,7 @@ from normpare.stages.deutung import (
     build_chapter_prompt,
     build_system_prompt,
     cache_key,
+    check_axes,
     run_deutung,
     structural_operation,
 )
@@ -429,19 +430,113 @@ def test_the_four_separation_rules_are_in_the_schema(tmp_path):
         assert rule in prompt.lower(), rule
 
 
-def test_the_component_vocabulary_is_unchanged():
-    """Only the description grows -- the ten values and the escape hatch stay put.
+# -- 11: the vocabulary is closed around what the first runs needed (AP-16) ---------------
 
-    The rules sharpen the boundaries between existing values; a vocabulary that changed
-    with them would make every run before AP-15 incomparable, and ``other:`` is the
-    measuring point that shows whether the vocabulary carries at all.
+#: The ten values of AP-14/AP-15, in the order they were introduced in.
+OLD_COMPONENTS = ["proof_obligation", "limit_value", "procedure", "deadline",
+                  "responsibility", "documentation", "scope", "definition",
+                  "reference", "none"]
+
+#: The five AP-16 adds. They are the clusters of the ``other:`` values of the first two
+#: runs (428 uses, 60 % of them in these five), measured on 4110 **and** 60909.
+NEW_COMPONENTS = ["formula", "note", "heading", "caption", "example"]
+
+
+def test_the_five_new_components_are_accepted(tmp_path):
+    """``formula``, ``note``, ``heading``, ``caption`` and ``example`` pass the validator.
+
+    They were the five largest clusters of free ``other:`` labels of the first two runs.
+    A value the model was asked for but the validator discards would be counted as a
+    defect of the model, which is why prompt and vocabulary are checked together.
+    """
+    out = _run(tmp_path, _answer(interpretations=[
+        _interpretation(affected_components=list(NEW_COMPONENTS))]))
+
+    assert _first(out)["affected_components"] == NEW_COMPONENTS   # order kept, none lost
+    assert _feedback(out, "affected_components") == []
+
+    # each one on its own, straight through the validator, and mixed with an old value
+    for value in NEW_COMPONENTS:
+        fields, bad = check_axes({"semantic_status": "clarified",
+                                  "normative_direction": "unchanged",
+                                  "affected_components": [value, "scope"]},
+                                 {"kind": "similar"})
+        assert fields["affected_components"] == [value, "scope"], value
+        assert bad == [], value
+
+    # and they are in the description the model reads, one sentence each
+    described = _component_description()
+    for value in NEW_COMPONENTS:
+        assert value in described, value
+
+
+def test_the_vocabulary_has_fifteen_values():
+    """Fifteen values plus ``other:`` -- and the ten of AP-15 unchanged among them.
+
+    ``other:`` was used in 13.9 % (4110) and 20.5 % (60909) of all interpretations, too
+    much for a vocabulary meant to structure training material. The five additions close
+    the recurring clusters; the remaining 30 % of genuinely subject-specific single cases
+    are what ``other:`` stays there for, so the escape hatch is not touched.
     """
     assert AFFECTED_COMPONENTS == ["proof_obligation", "limit_value", "procedure",
                                    "deadline", "responsibility", "documentation",
-                                   "scope", "definition", "reference", "none"]
+                                   "scope", "definition", "reference",
+                                   "formula", "note", "heading", "caption", "example",
+                                   "none"]
+    assert len(AFFECTED_COMPONENTS) == 15
+    assert len(set(AFFECTED_COMPONENTS)) == 15
     assert OTHER_COMPONENT == "other:"
+
+    # the ten older values survive, in their old relative order -- every earlier run
+    # stays comparable value by value
+    assert [c for c in AFFECTED_COMPONENTS if c in OLD_COMPONENTS] == OLD_COMPONENTS
+    assert set(NEW_COMPONENTS) == set(AFFECTED_COMPONENTS) - set(OLD_COMPONENTS)
+    assert "indeterminate" not in AFFECTED_COMPONENTS     # abstention lives on B and C
 
     described = _component_description()
     assert "|".join(AFFECTED_COMPONENTS) in described     # still one pipe-separated list
     assert "other:<short label>" in described
     assert "most important first" in described
+
+
+def test_the_fifth_separation_rule_is_in_the_schema():
+    """Terminology and notation stay with ``definition``; ``formula`` is the equation.
+
+    They deliberately did **not** become a value of their own: a sixth value overlapping
+    ``definition`` would build in the next ambiguity, which is the defect ``restricted``
+    stands for. A separation rule costs a sentence and no vocabulary.
+    """
+    described = _component_description().lower()
+
+    assert "definition also for a changed designation" in described
+    assert "spelling" in described and "symbol notation" in described
+    assert "formula only when the equation itself changes" in described
+    assert "not its name" in described
+
+    # the four rules of AP-15 are untouched by the fifth
+    for rule in ("whether or to whom", "as soon as a body accepts", "terms chapter",
+                 "nothing but the reference"):
+        assert rule in described, rule
+
+    prompt, _sel = build_chapter_prompt(_chapter(list(CHANGES)), OLD_A, NEW_A)
+    assert "formula only when the equation itself changes" in prompt.lower()
+
+
+def test_artefacts_are_directed_to_pipeline_feedback():
+    """A torn formula is a finding about the preprocessing, not a component of a standard.
+
+    ``other:Formelfragment``, ``other:Textfragment`` and their relatives made up 4.7 % of
+    the free values of the first two runs. The field for them exists (``pipeline_feedback``,
+    asked for in the same answer), so the description says where they belong instead of
+    the vocabulary growing a value for a defect of our own pipeline.
+    """
+    described = _component_description()
+    lowered = described.lower()
+
+    assert "pipeline_feedback" in described
+    assert "preprocessing artefact" in lowered
+    assert "not on this axis" in lowered
+
+    prompt, _sel = build_chapter_prompt(_chapter(list(CHANGES)), OLD_A, NEW_A)
+    assert "not on this axis" in prompt.lower()
+    assert "pipeline_feedback" in prompt
