@@ -34,8 +34,10 @@ import json
 
 from normpare.stages.deutung import (
     AFFECTED_COMPONENTS,
+    CHAPTER_SCHEMA_DOC,
     INDETERMINATE_REASONS,
     NORMATIVE_DIRECTIONS,
+    OTHER_COMPONENT,
     PIPELINE_OWNED_INTERPRETATION,
     SEMANTIC_STATUS,
     STRUCTURAL_OPERATIONS,
@@ -385,3 +387,61 @@ def test_the_prompt_describes_the_new_axes(tmp_path):
                        INDETERMINATE_REASONS):
         for value in vocabulary:
             assert value in prompt, value
+
+
+# -- 10: the four separation rules of axis D (AP-15, from AP-14 F-2) ----------------------
+
+def _component_description() -> str:
+    """The one line of :data:`CHAPTER_SCHEMA_DOC` that describes axis D."""
+    return next(line for line in CHAPTER_SCHEMA_DOC.splitlines()
+                if '"affected_components"' in line)
+
+
+def test_the_four_separation_rules_are_in_the_schema(tmp_path):
+    """Axis D has to say where its values end, not only which ones exist.
+
+    AP-14 found four pairs that are decided by the field description rather than by the
+    subject matter. An undefined vocabulary is the very defect ENT-01 answers: it is what
+    made ``restricted`` split 14 / 15 / 13. The rules therefore belong where the model
+    reads them, in the description of the field itself.
+    """
+    described = _component_description().lower()
+
+    # 1. proof_obligation against procedure -- whether/to whom against how
+    assert "whether or to whom" in described
+    assert "is how" in described
+    assert "proof_obligation first" in described
+    # 2. documentation against proof_obligation -- decided by the accepting body
+    assert "records" in described
+    assert "as soon as a body accepts" in described
+    # 3. scope against definition -- the terms chapter or a legal definition
+    assert "terms chapter" in described
+    assert "legal definition" in described
+    assert "scope behind it" in described
+    # 4. reference against everything else -- only when it is nothing but the reference
+    assert "nothing but the reference" in described
+    assert "reference behind it" in described
+
+    # and they reach the model, not just the constant
+    prompt, _sel = build_chapter_prompt(_chapter(list(CHANGES)), OLD_A, NEW_A)
+    for rule in ("whether or to whom", "as soon as a body accepts", "terms chapter",
+                 "nothing but the reference"):
+        assert rule in prompt.lower(), rule
+
+
+def test_the_component_vocabulary_is_unchanged():
+    """Only the description grows -- the ten values and the escape hatch stay put.
+
+    The rules sharpen the boundaries between existing values; a vocabulary that changed
+    with them would make every run before AP-15 incomparable, and ``other:`` is the
+    measuring point that shows whether the vocabulary carries at all.
+    """
+    assert AFFECTED_COMPONENTS == ["proof_obligation", "limit_value", "procedure",
+                                   "deadline", "responsibility", "documentation",
+                                   "scope", "definition", "reference", "none"]
+    assert OTHER_COMPONENT == "other:"
+
+    described = _component_description()
+    assert "|".join(AFFECTED_COMPONENTS) in described     # still one pipe-separated list
+    assert "other:<short label>" in described
+    assert "most important first" in described
