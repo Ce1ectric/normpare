@@ -83,6 +83,30 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Axis D has fifteen values instead of ten: `formula`, `note`, `heading`, `caption` and
+  `example` join the vocabulary in front of `none`, the ten older ones keep their order.
+  They are the five largest clusters of the free `other:` labels of the first two axis
+  runs, which used the escape hatch in 13.9 % (4110) and 20.5 % (60909) of all
+  interpretations — too much for a vocabulary meant to structure training material. The
+  remaining ~30 % of genuinely subject-specific single cases are what `other:` stays for.
+  Terminology and notation formed a sixth cluster and deliberately did **not** become a
+  value: they overlap `definition` and would have built in the next ambiguity, so a fifth
+  separation rule tells them apart instead (`definition` also for a changed designation,
+  spelling or symbol notation; `formula` only when the equation itself changes). The
+  description also directs recognisable preprocessing artefacts to `pipeline_feedback`
+  rather than onto the axis. Together +573 characters per chapter call, so **the answer
+  cache is out of reach again**.
+- The contradiction rule `not_applicable_with_component` is dropped without replacement.
+  It flagged non-normative text that touches a normative component and produced 567 of
+  589 reported contradictions on 4110 and 712 of 715 on 60909 — every sampled case sound:
+  the title of a referenced standard changes (`reference`) without any duty moving. Axis
+  D says *what* a change is about, axis C whether a duty moves; the rule equated the two
+  and so measured the very category error the axes remove. Without it the share of
+  self-contradictory interpretations is **1.38 % (4110)** and **0.30 % (60909)**, against
+  5.89 % and 6.24 % that the old flat schema produces on the same two runs. The two
+  remaining rules are unchanged. `tools/axis_report.py` now lists every value of axis D
+  in its comparison view, a frequency of zero included: whether a newly offered value is
+  picked up at all is the measurement.
 - The interpretation prompt describes the four new axes and says explicitly that
   `narrowed` is about scope and never about strictness — that confusion is what produced
   the defect — and it invites an honest `indeterminate` over a forced label. This makes a
