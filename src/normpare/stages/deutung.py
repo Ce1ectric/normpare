@@ -89,6 +89,9 @@ NORMATIVE_DIRECTIONS = ["tightened", "relaxed", "unchanged", "not_applicable",
 #: Axis D -- which components of the standard a change touches. Multi-valued, most
 #: important first (the ``keywords`` convention). The vocabulary is a proposal and not
 #: yet confirmed domain knowledge, which is what :data:`OTHER_COMPONENT` is for.
+#: Four of the ten values are told apart by their description rather than by the subject
+#: matter (AP-14, F-2); the separating rules therefore live in the field description in
+#: :data:`CHAPTER_SCHEMA_DOC`, where the model reads them, not in a comment.
 AFFECTED_COMPONENTS = ["proof_obligation", "limit_value", "procedure", "deadline",
                        "responsibility", "documentation", "scope", "definition",
                        "reference", "none"]
@@ -259,7 +262,7 @@ CHAPTER_SCHEMA_DOC = """{
     "obligation": "tightened|relaxed|unchanged",
     "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction)",
     "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text",
-    "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|none; use 'other:<short label>' if none of them fits"],
+    "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|none; use 'other:<short label>' if none of them fits. Separation rules: proof_obligation when what changes is whether or to whom something must be proven, procedure when what changes is how (both may apply, then proof_obligation first); documentation for producing, keeping or presenting records with no body accepting them, proof_obligation as soon as a body accepts the proof; definition only for a change in the terms chapter or to a legal definition, with scope behind it if that shifts the scope of application indirectly; reference only when the change is nothing but the reference, otherwise the substantive component first and reference behind it"],
     "indeterminate_reason": "no_evidence|ambiguous_scope|conflicting_signals|outside_text -- required when semantic_status or normative_direction is indeterminate, '' otherwise",
     "change": "1-2 sentences describing the substance of the change",
     "impact": "1 sentence on the practical impact ('' if none)",
