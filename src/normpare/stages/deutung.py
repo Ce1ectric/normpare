@@ -40,6 +40,171 @@ LABELS = {
 LANGUAGE_NAMES = {"de": "German", "en": "English", "fr": "French", "es": "Spanish",
                   "it": "Italian", "nl": "Dutch"}
 
+
+# ------------------------------------------------------------------ four-axis taxonomy
+# ENT-01. One flat label cannot carry three statements at once, and ``semantic_label``
+# tries to. Measured on ``out/4110_2026-08b`` (1749 interpretations), ``restricted``
+# splits 14 / 15 / 13 over ``tightened`` / ``relaxed`` / ``unchanged``: the value means
+# "the scope was restricted" (fewer cases covered -- a relaxation for whoever is bound)
+# and "the requirement was restricted" (a tightening) at the same time. Another 84
+# interpretations claim a duty appeared or fell away and report ``unchanged`` with it.
+# Together roughly 7 % contradict themselves, not for want of model quality but because
+# the schema does not keep the statements apart.
+#
+# Four axes keep them apart. They are introduced *additively*: ``semantic_label`` and
+# ``obligation`` keep running unchanged, so both readings are collected on the same
+# chapters and the replacement can be decided on measurements rather than on intent.
+
+#: Axis A -- the structural operation, keyed by the ``kind`` of the change record.
+#: **Pipeline-owned** (ENT-51): deterministic, never asked of the model. ``cosmetic``
+#: is a modification like any other here; that its wording is semantically equal is a
+#: statement about axis B, and mixing it in is the very defect this taxonomy removes.
+#: ``identical`` never reaches a change record (the diff counts it as ``n_identical``);
+#: it is listed because the paragraph aligner emits it and a future caller may pass it.
+STRUCTURAL_OPERATIONS = {
+    "new": "added",
+    "removed": "removed",
+    "changed": "modified",
+    "similar": "modified",
+    "cosmetic": "modified",
+    "merged": "merged",
+    "split": "split",
+    "moved_in": "moved",
+    "moved_away": "moved",
+    "identical": "unchanged",
+}
+
+#: Axis B -- what happens to the *statement*, without judging its effect. ``narrowed``
+#: replaces ``restricted`` and is a statement about SCOPE only; whoever means strictness
+#: uses axis C.
+SEMANTIC_STATUS = ["equivalent", "clarified", "extended", "narrowed", "replaced",
+                   "contradictory", "indeterminate"]
+
+#: Axis C -- the direction of the duty. ``not_applicable`` is for non-normative text,
+#: which today is forced into ``unchanged`` and mixed with genuine non-changes (168 of
+#: them in the 4110 run).
+NORMATIVE_DIRECTIONS = ["tightened", "relaxed", "unchanged", "not_applicable",
+                        "indeterminate"]
+
+#: Axis D -- which components of the standard a change touches. Multi-valued, most
+#: important first (the ``keywords`` convention). The vocabulary is a proposal and not
+#: yet confirmed domain knowledge, which is what :data:`OTHER_COMPONENT` is for.
+AFFECTED_COMPONENTS = ["proof_obligation", "limit_value", "procedure", "deadline",
+                       "responsibility", "documentation", "scope", "definition",
+                       "reference", "none"]
+
+#: Prefix of the escape hatch on axis D: ``other:<short label>``. Every use is reported
+#: with its free text, so the vocabulary above can be corrected from what was needed
+#: rather than from what was imagined.
+OTHER_COMPONENT = "other:"
+
+#: ENT-02 -- why an axis was left undecided. Closed vocabulary; ``ambiguous_scope`` is
+#: the code for exactly the cases that appear as ``restricted`` today.
+INDETERMINATE_REASONS = ["no_evidence", "ambiguous_scope", "conflicting_signals",
+                         "outside_text"]
+
+#: The value that triggers the reason requirement.
+INDETERMINATE = "indeterminate"
+
+#: Abstention lives on axes B and C, never on D: "which component is affected" is a
+#: question about the text, not a judgement that can be left open.
+ABSTENTION_AXES = ("semantic_status", "normative_direction")
+
+#: Why a supplied axis value was discarded -- the phrasing used in ``pipeline_feedback``.
+AXIS_VIOLATIONS = {
+    "missing": "is missing",
+    "outside_vocabulary": "lies outside the closed vocabulary",
+    "not_a_list": "is not a list",
+    "reason_missing": "abstains without a reason code (ENT-02)",
+    "reason_without_abstention": "carries a reason code without an abstention",
+}
+
+
+def structural_operation(change: dict | None) -> str | None:
+    """Axis A of a change record -- ``None`` for an unknown or absent ``kind``.
+
+    Fails closed on purpose: a kind the mapping does not know is reported as "no
+    operation" rather than as the nearest one, so a new kind shows up as a gap instead
+    of quietly joining an existing bucket.
+    """
+    return STRUCTURAL_OPERATIONS.get((change or {}).get("kind"))
+
+
+def _valid_component(value) -> bool:
+    """Whether a single axis-D entry is admissible -- vocabulary or labelled ``other:``."""
+    if not isinstance(value, str):
+        return False
+    if value.startswith(OTHER_COMPONENT):
+        return bool(value[len(OTHER_COMPONENT):].strip())
+    return value in AFFECTED_COMPONENTS
+
+
+def check_axes(deutung: dict, change: dict | None = None) -> tuple[dict, list[dict]]:
+    """The four axes of one interpretation, checked against their vocabularies.
+
+    Returns the fields to write into the interpretation and the violations found. A
+    value outside its vocabulary is **discarded and reported, never corrected**:
+    reading ``restricted`` as ``narrowed`` or ``verschärft`` as ``tightened`` would
+    measure the correction instead of the model, and the whole point of the additive
+    introduction is to measure.
+
+    Axis A comes from ``change`` and is not read from the answer at all -- the model
+    never sees the field (see :data:`PIPELINE_OWNED_INTERPRETATION`).
+
+    Axis D keeps the order it was delivered in ("most important first") and is filtered
+    entry by entry; an empty result is ``None``, so "nothing usable was said" stays
+    distinguishable from the explicit ``none``.
+
+    ENT-02: ``indeterminate`` on axis B or C requires a code from
+    :data:`INDETERMINATE_REASONS`. An abstention without one is not an abstention but a
+    second way of saying nothing, so the axis is emptied and counted.
+    """
+    bad: list[dict] = []
+
+    def reject(field: str, value, reason: str) -> None:
+        bad.append({"field": field, "value": value, "reason": reason})
+
+    fields: dict = {"structural_operation": structural_operation(change)}
+
+    for field, vocabulary in (("semantic_status", SEMANTIC_STATUS),
+                              ("normative_direction", NORMATIVE_DIRECTIONS)):
+        value = deutung.get(field)
+        if value in vocabulary:
+            fields[field] = value
+        else:
+            fields[field] = None
+            reject(field, value, "missing" if not value else "outside_vocabulary")
+
+    supplied = deutung.get("affected_components")
+    if not isinstance(supplied, list):
+        fields["affected_components"] = None
+        reject("affected_components", supplied,
+               "missing" if supplied is None else "not_a_list")
+    elif not supplied:
+        fields["affected_components"] = None
+        reject("affected_components", supplied, "missing")
+    else:
+        for c in supplied:
+            if not _valid_component(c):
+                reject("affected_components", c, "outside_vocabulary")
+        fields["affected_components"] = [c for c in supplied if _valid_component(c)] or None
+
+    reason = deutung.get("indeterminate_reason")
+    reason = reason.strip() if isinstance(reason, str) else None
+    if reason and reason not in INDETERMINATE_REASONS:
+        reject("indeterminate_reason", reason, "outside_vocabulary")
+        reason = None
+    abstained = [f for f in ABSTENTION_AXES if fields[f] == INDETERMINATE]
+    if abstained and not reason:
+        for f in abstained:
+            fields[f] = None
+            reject(f, INDETERMINATE, "reason_missing")
+    elif reason and not abstained:
+        reject("indeterminate_reason", reason, "reason_without_abstention")
+        reason = None
+    fields["indeterminate_reason"] = reason or None
+    return fields, bad
+
 _SYSTEM_PROMPT_TEMPLATE = (
     "You are a domain expert analysing two editions of a technical standard{title}. You are "
     "preparing training material on what changed between the old and the new edition. Work "
@@ -56,6 +221,12 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "looks like a PREPROCESSING artefact rather than a real change: stray page numbers, torn "
     "or merged paragraphs, swallowed hyphens, formula or encoding residue, obviously wrong "
     "alignments, or gaps in the source document. "
+    "The interpretation axes are INDEPENDENT and are decided separately: semantic_status "
+    "says what happens to the statement, normative_direction what it means for whoever is "
+    "bound by it -- a smaller scope (narrowed) usually relaxes the burden, a narrower "
+    "permission tightens it. Where the text itself does not settle one of the two, answer "
+    "'indeterminate' with a reason code instead of guessing; an honest abstention is worth "
+    "more than a forced label. "
     "Write every free-text value in {language}; keep the enum values exactly as given in the "
     "schema (English). Answer with the required JSON only, no markdown fences."
 )
@@ -86,6 +257,10 @@ CHAPTER_SCHEMA_DOC = """{
    {"change_index": <int, index from the change list>,
     "semantic_label": "equivalent|clarified|extended|restricted|new_obligation|removed_obligation|moved|optional|informative|contradictory",
     "obligation": "tightened|relaxed|unchanged",
+    "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction)",
+    "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text",
+    "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|none; use 'other:<short label>' if none of them fits"],
+    "indeterminate_reason": "no_evidence|ambiguous_scope|conflicting_signals|outside_text -- required when semantic_status or normative_direction is indeterminate, '' otherwise",
     "change": "1-2 sentences describing the substance of the change",
     "impact": "1 sentence on the practical impact ('' if none)",
     "cross_reference_note": "meaning of changed internal/external references: 'renumbered' for a pure structural follow-on, otherwise a short explanation of the new target ('' if no reference change)",
@@ -137,7 +312,8 @@ PIPELINE_OWNED_CHAPTER = ("section_id", "mapping_id", "_source",
 PIPELINE_OWNED_INTERPRETATION = ("evidence_ok", "evidence_strict", "evidence_match_chars",
                                  "evidence_fragments", "evidence_unique",
                                  "evidence_span", "evidence_extraction",
-                                 "change_index_best", "change_index_disputed")
+                                 "change_index_best", "change_index_disputed",
+                                 "structural_operation")
 
 #: Pipeline-owned fields of a table or figure interpretation.
 PIPELINE_OWNED_ASSET = ("evidence_ok", "evidence_strict", "evidence_match_chars",
@@ -873,16 +1049,23 @@ def _record_haystack(c: dict) -> str:
     return " ".join(n2(c.get(k) or "").lower() for k in ("old_text", "new_text"))
 
 
-def change_haystack(deutung: dict, ch: dict) -> str:
-    """Old and new text of the addressed change record, normalized and lower case.
+def change_record(deutung: dict, ch: dict) -> dict | None:
+    """The change record an interpretation addresses, ``None`` if its index names none.
 
-    An absent or out-of-range ``change_index`` yields an empty haystack, so the
-    interpretation fails closed instead of being checked against a foreign record.
+    The one place that reads ``change_index``: an absent or out-of-range index yields
+    no record, and everything built on it (the haystack of the evidence guard, axis A)
+    fails closed instead of describing a foreign change.
     """
     i = deutung.get("change_index")
     if isinstance(i, int) and 0 <= i < len(ch["changes"]):
-        return _record_haystack(ch["changes"][i])
-    return ""
+        return ch["changes"][i]
+    return None
+
+
+def change_haystack(deutung: dict, ch: dict) -> str:
+    """Old and new text of the addressed change record, normalized and lower case."""
+    c = change_record(deutung, ch)
+    return _record_haystack(c) if c is not None else ""
 
 
 def _evidence_unique(ev: str, deutung: dict, ch: dict) -> bool:
@@ -1044,6 +1227,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         data = answers.get(tag)
         drops = Counter()          # field -> how often it arrived in this chapter
         supplied = {}              # field -> the discarded value, for the report
+        invalid = Counter()        # (axis field, violation) -> how often in this chapter
+        offenders: dict = {}       # (axis field, violation) -> the discarded values
         if data is None:
             # fallback: extractive
             data = {"section_id": cid,
@@ -1061,6 +1246,15 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
             data["_source"] = "llm"
             for d in data.get("interpretations", []):
                 drops.update(drop_pipeline_owned(d, PIPELINE_OWNED_INTERPRETATION).keys())
+                # ENT-01: axis A from the change record, axes B/C/D checked against
+                # their vocabularies. A rejected value is discarded and counted below,
+                # never corrected -- see check_axes
+                axes, violations = check_axes(d, change_record(d, ch))
+                d.update(axes)
+                for v in violations:
+                    key = (v["field"], v["reason"])
+                    invalid[key] += 1
+                    offenders.setdefault(key, []).append(v["value"])
                 d.update(check_evidence(d, ch))
                 # class V: the model's change_index stays as it is, the cross-check only
                 # says whether another record of the chapter fits the quote better
@@ -1101,6 +1295,17 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                             f"'{field}' {n}x; the value was discarded"
                             + (f" (it said {was!r}, the pipeline says {cid!r})"
                                if field == "section_id" and was != cid else "")),
+            })
+        # ... and what the model wrote into an axis it does own, outside the vocabulary
+        # it was given (ENT-01). Counted, not repaired: a quietly corrected answer would
+        # make the measurement of the new taxonomy measure the correction.
+        for (field, reason), n in sorted(invalid.items()):
+            seen = list(dict.fromkeys(str(v) for v in offenders[(field, reason)]))
+            dropped.append({
+                "section_id": cid, "mapping_id": mid, "phase": "deutung",
+                "field": field, "reason": reason, "count": n,
+                "finding": (f"the axis field '{field}' {AXIS_VIOLATIONS[reason]} in {n} "
+                            f"interpretation(s): {seen[:5]}; discarded, not corrected"),
             })
 
     # aggregate preprocessing feedback -> feed it back to the pipeline phases

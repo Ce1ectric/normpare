@@ -164,7 +164,7 @@ def test_the_report_shows_both_schemas(axis_report, tmp_path):
     assert summary["narrowed"] == {"tightened": 1, "relaxed": 1}
     assert summary["migration"][("restricted", "narrowed")] == 2
     assert summary["migration"][("informative", "equivalent")] == 1
-    assert summary["components"]["scope"] == 2
+    assert summary["components"]["scope"] == 3
     assert summary["component_list_lengths"] == {1: 3, 2: 1}
     assert summary["indeterminate_reasons"] == {"ambiguous_scope": 1}
     # the abstention above sits on an interpretation the old schema called 'clarified',

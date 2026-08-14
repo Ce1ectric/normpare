@@ -354,3 +354,10 @@ def test_the_prompt_describes_the_new_axes(tmp_path):
 
     described = next(line for line in prompt.splitlines() if '"semantic_status"' in line)
     assert "narrowed" in described and "scope" in described.lower()
+
+    # prompt and validator have to name the same values -- a vocabulary that drifts
+    # apart from its field description rejects what the model was asked for
+    for vocabulary in (SEMANTIC_STATUS, NORMATIVE_DIRECTIONS, AFFECTED_COMPONENTS,
+                       INDETERMINATE_REASONS):
+        for value in vocabulary:
+            assert value in prompt, value
