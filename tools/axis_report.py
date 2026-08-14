@@ -90,15 +90,18 @@ def _components(row: dict) -> list:
 #: Combinations that cannot both be true of the same change. Kept as a constant, and
 #: deliberately narrow: every rule names a pair whose two halves contradict each other
 #: by definition, not a pair that is merely rare.
+#:
+#: A third rule, ``not_applicable_with_component``, was dropped in AP-16. It flagged
+#: non-normative text that touches a normative component and produced 569 of 589
+#: reported contradictions on 4110 and 712 of 715 on 60909 -- every sampled case sound:
+#: the title of a referenced standard changes (``reference``) without any duty moving.
+#: Axis D says **what** a change is about, axis C whether a duty moves; the rule equated
+#: the two and so measured the very category error ENT-01 removes.
 CONTRADICTIONS = (
     # the statement is unchanged, yet the duty is said to move
     ("equivalent_but_directed",
      lambda r: r.get("semantic_status") == "equivalent"
      and r.get("normative_direction") in ("tightened", "relaxed")),
-    # non-normative text that nevertheless touches a normative component
-    ("not_applicable_with_component",
-     lambda r: r.get("normative_direction") == "not_applicable"
-     and any(c != "none" for c in _components(r))),
     # nothing changed about the statement, yet a proof obligation is affected
     ("equivalent_with_proof_obligation",
      lambda r: r.get("semantic_status") == "equivalent"
@@ -435,10 +438,13 @@ def render_comparison(runs: list[dict]) -> str:
 
     # 4. axis D side by side -- where a connection rule differs from a calculation standard
     L += ["", "4. affected_components (D), per run: count and share of interpretations"]
+    # every value of the vocabulary, a zero included: whether the five values AP-16 added
+    # are picked up at all is what the next run has to answer, and a row that disappears
+    # at zero cannot be told from a value that was never offered. It also keeps the rows
+    # of all runs lined up, which is the point of putting them side by side.
     for c in AFFECTED_COMPONENTS:
-        if any(r["summary"]["components"][c] for r in runs):
-            L += [_row(c, counts(lambda r, c=c: r["summary"]["components"][c]),
-                       indent="      ")]
+        L += [_row(c, counts(lambda r, c=c: r["summary"]["components"][c]),
+                   indent="      ")]
     # the free values are summed up here and listed one by one in section 5
     L += [_row("other:*", counts(_other_total), indent="      ")]
 

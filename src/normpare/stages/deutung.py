@@ -89,12 +89,20 @@ NORMATIVE_DIRECTIONS = ["tightened", "relaxed", "unchanged", "not_applicable",
 #: Axis D -- which components of the standard a change touches. Multi-valued, most
 #: important first (the ``keywords`` convention). The vocabulary is a proposal and not
 #: yet confirmed domain knowledge, which is what :data:`OTHER_COMPONENT` is for.
-#: Four of the ten values are told apart by their description rather than by the subject
+#: Several values are told apart by their description rather than by the subject
 #: matter (AP-14, F-2); the separating rules therefore live in the field description in
 #: :data:`CHAPTER_SCHEMA_DOC`, where the model reads them, not in a comment.
+#:
+#: AP-16 added the last five, in front of ``none``: ``other:`` carried 13.9 % (4110) and
+#: 20.5 % (60909) of the first two runs, and 60 % of those 428 free labels fell into
+#: exactly these five clusters. Terminology and notation formed a sixth cluster and did
+#: **not** become a value -- they overlap ``definition`` and would have built in the next
+#: ambiguity; a separation rule does the same work without a vocabulary change. The
+#: ten older values keep their relative order, so every earlier run stays comparable.
 AFFECTED_COMPONENTS = ["proof_obligation", "limit_value", "procedure", "deadline",
                        "responsibility", "documentation", "scope", "definition",
-                       "reference", "none"]
+                       "reference", "formula", "note", "heading", "caption", "example",
+                       "none"]
 
 #: Prefix of the escape hatch on axis D: ``other:<short label>``. Every use is reported
 #: with its free text, so the vocabulary above can be corrected from what was needed
@@ -262,7 +270,7 @@ CHAPTER_SCHEMA_DOC = """{
     "obligation": "tightened|relaxed|unchanged",
     "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction)",
     "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text",
-    "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|none; use 'other:<short label>' if none of them fits. Separation rules: proof_obligation when what changes is whether or to whom something must be proven, procedure when what changes is how (both may apply, then proof_obligation first); documentation for producing, keeping or presenting records with no body accepting them, proof_obligation as soon as a body accepts the proof; definition only for a change in the terms chapter or to a legal definition, with scope behind it if that shifts the scope of application indirectly; reference only when the change is nothing but the reference, otherwise the substantive component first and reference behind it"],
+    "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|formula|note|heading|caption|example|none; use 'other:<short label>' if none of them fits. formula for an equation or its symbols; note for a note or an explanatory remark; heading for a heading or the numbering of the outline; caption for the caption or legend of a figure or a table; example for a worked example or a sample calculation. Separation rules: proof_obligation when what changes is whether or to whom something must be proven, procedure when what changes is how (both may apply, then proof_obligation first); documentation for producing, keeping or presenting records with no body accepting them, proof_obligation as soon as a body accepts the proof; definition only for a change in the terms chapter or to a legal definition, with scope behind it if that shifts the scope of application indirectly; reference only when the change is nothing but the reference, otherwise the substantive component first and reference behind it; definition also for a changed designation, spelling or symbol notation of a term, formula only when the equation itself changes and not its name. Recognisable preprocessing artefacts (a torn sentence, formula residue, a corrected typo) belong in pipeline_feedback and not on this axis."],
     "indeterminate_reason": "no_evidence|ambiguous_scope|conflicting_signals|outside_text -- required when semantic_status or normative_direction is indeterminate, '' otherwise",
     "change": "1-2 sentences describing the substance of the change",
     "impact": "1 sentence on the practical impact ('' if none)",
