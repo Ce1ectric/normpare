@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from ..text.textnorm import n3
+from .axes import axis_marker
 
 _CSS = """
 body{font-family:'Segoe UI',Arial,sans-serif;margin:0;color:#1a1a1a;line-height:1.5}
@@ -47,6 +48,7 @@ del,.del{background:#ffe3e3;color:#b91c1c;padding:0 1px}
 .asset-deutung .asset-aus{color:#555;margin-top:3px}
 .verb{display:inline-block;font-size:11px;font-weight:600;padding:0 7px;border-radius:9px;vertical-align:middle}
 .v-hi{background:#fee2e2;color:#b91c1c}.v-lo{background:#dbeafe;color:#1e40af}
+.axes{font-size:11px;color:#6b7280;font-family:ui-monospace,Menlo,Consolas,monospace}
 .legend{position:sticky;top:0;background:#fff;border-bottom:1px solid #ddd;padding:8px 0;font-size:13px;z-index:5}
 /* Echte Tabellen mit Zell-Diff */
 table.ntab{border-collapse:collapse;margin:4px 0;font-size:12.5px}
@@ -447,9 +449,19 @@ def build_annotated_html(new_doc: dict, synopse: dict, deutung: dict | None,
                 if verb in ("tightened", "relaxed"):
                     vtag = (f' <span class="verb v-{"hi" if verb == "tightened" else "lo"}">'
                             f'{html.escape(_lbl(verb, lang))}</span>')
+                # AP-17: the three model axes as a short marker behind the label; the
+                # abstention reason (ENT-02) rides along as the tooltip, where it costs
+                # no line. Empty for a run written before AP-14.
+                marker = axis_marker(dd)
+                mtag = ""
+                if marker:
+                    reason = dd.get("indeterminate_reason") or ""
+                    mtag = (f' <span class="axes"'
+                            + (f' title="{html.escape(reason)}"' if reason else "")
+                            + f'>{html.escape(marker)}</span>')
                 deut_html = (f'<div class="deutung">'
                              f'<b>{html.escape(_lbl(dd.get("semantic_label") or "", lang))}</b>'
-                             f'{vtag} — {html.escape(dd["change"])}'
+                             f'{vtag}{mtag} — {html.escape(dd["change"])}'
                              + (f' <i>{html.escape(dd.get("impact") or "")}</i>' if dd.get("impact") else "")
                              + (f'<br>↪ Querverweis: {html.escape(qv)}'
                                 if qv and qv not in ("renumbered", "renummeriert") else "")

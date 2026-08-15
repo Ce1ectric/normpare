@@ -339,12 +339,12 @@ def test_old_fields_are_untouched(tmp_path):
 
 
 def test_the_report_stage_is_unaffected(tmp_path):
-    """The report keeps reading ``semantic_label``; the axes ride along unread.
+    """The report keeps reading ``semantic_label``; the axes ride along beside it.
 
-    A characterization test: it is green from the start by design, because the promise
-    of the additive introduction is that nothing downstream changes. Displaying the axes
-    is a package of its own -- what is guarded here is that they can already be written
-    into ``deutung.json`` without touching a single line of the report.
+    A characterization test of the additive introduction: what an older reader takes out
+    of an interpretation must not change. AP-17 is the display package the AP-14 version
+    of this test was waiting for -- it adds ``marker`` next to the two older fields, and
+    the assertion below says exactly that: one field more, none altered and none gone.
     """
     from normpare.report.synopse_final import _build_entries
 
@@ -359,7 +359,8 @@ def test_the_report_stage_is_unaffected(tmp_path):
     change = entries[0]["changes"][0]
     assert change["label"] == "restricted"              # ... and change nothing there
     assert change["binding"] == "tightened"
-    assert set(change) == {"label", "binding", "text", "impact"}
+    assert set(change) == {"label", "binding", "text", "impact", "marker"}   # AP-17
+    assert change["marker"] == "[narrowed · tightened · deadline, proof_obligation]"
 
 
 # -- 9: the prompt asks for the new axes and not for the pipeline's -----------------------

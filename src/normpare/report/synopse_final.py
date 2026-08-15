@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .axes import axis_marker
+
 _RELEVANCE_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
@@ -38,6 +40,8 @@ def _build_entries(synopse: dict, deutung: dict) -> list[dict]:
             changes.append({
                 "label": (d.get("semantic_label") or "").strip(),
                 "binding": (d.get("obligation") or "").strip(),
+                # AP-17: the three model axes behind the label, empty for a run without them
+                "marker": axis_marker(d),
                 "text": text,
                 "impact": (d.get("impact") or "").strip(),
             })
@@ -125,6 +129,10 @@ def build_final_synopse(synopse: dict, deutung: dict, out_path: str | Path,
                 tag = " · ".join(_lbl(x, lang) for x in (c["label"], c["binding"]) if x)
                 if tag:
                     _run(p, f"[{tag}] ", bold=True, color=label_color.get(c["label"], grey))
+                # the axes stay in their neutral schema wording: they have no German
+                # rendering yet, and a half-translated marker would read as two vocabularies
+                if c["marker"]:
+                    _run(p, f"{c['marker']} ", color=grey)
                 _run(p, c["text"])
                 if c["impact"]:
                     sub = doc.add_paragraph()

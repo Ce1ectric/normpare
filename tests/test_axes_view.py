@@ -13,7 +13,12 @@ from __future__ import annotations
 import csv
 
 from normpare.report.axes import axis_marker, carries_axes, change_rows
-from normpare.report.changes_csv import CSV_COLUMNS, DELIMITER, ENCODING, build_changes_csv
+from normpare.report.changes_csv import (
+    CSV_COLUMNS,
+    DELIMITER,
+    ENCODING,
+    build_changes_csv,
+)
 from normpare.report.component_view import build_component_view, render_component_view
 from normpare.stages.deutung import AFFECTED_COMPONENTS
 
@@ -209,6 +214,12 @@ def test_component_view_notes_a_run_without_axes(tmp_path):
     assert "## `scope`" in text
     assert not carries_axes(_deutung_without_axes())
     assert carries_axes(_deutung())
+
+    # a run without any interpretation at all (--no-llm) gets the other note: nothing to
+    # group is a different finding from nothing to group it by
+    empty = render_component_view([], "TR-X", DATE, carries=False)
+    assert "enthält keine Deutung" in empty
+    assert "führt die vier Achsen nicht" not in empty
 
 
 # -- Teil 3: the marker in the existing outputs -------------------------------------------

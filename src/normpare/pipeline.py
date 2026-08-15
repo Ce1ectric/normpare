@@ -156,6 +156,8 @@ class Pipeline:
                     title=self.cfg.new.title or self.cfg.pair_label)
 
     def report(self) -> None:
+        from .report.changes_csv import build_changes_csv
+        from .report.component_view import build_component_view
         from .report.csv_export import export_tables_csv
         from .report.dossier_report import build_dossier
         from .report.html import build_annotated_html
@@ -184,3 +186,9 @@ class Pipeline:
         build_pptx(syn, deut, stats, self.out / f"Aenderungen_{run}.pptx", pair)
         # the readable side of review_removed.json (AP-11); needs no interpretation
         build_review_list(syn, new, self.out / f"Pruefliste_entfallen_{run}.md", pair)
+        # the four axes, made visible (AP-17): one row per interpretation for the
+        # spreadsheet, and the same material grouped by affected component for a reader.
+        # Both are written for a run without interpretation too -- then they are empty.
+        build_changes_csv(syn, deut, self.out / f"Aenderungen_{run}.csv")
+        build_component_view(syn, deut, self.out / f"Aenderungen_nach_Komponente_{run}.md",
+                             pair)
