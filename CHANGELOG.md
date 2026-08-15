@@ -8,6 +8,37 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Two new deliverables that put the four axes in front of a reader, and a marker in the
+  two existing ones. Until now the axes existed only in `deutung.json`: the 238
+  interpretations that touch a `proof_obligation` in the 4110 run were there and visible
+  to nobody who does not read JSON.
+  - `Aenderungen_<run>.csv` — one row per interpretation, 17 columns in a fixed order
+    (`section_id`, `mapping_id`, `chapter_title`, `change_index`, `change_kind`, the five
+    axis fields, `semantic_label`, `obligation`, `change`, `impact`, `evidence`,
+    `evidence_ok`, `confidence`), so the result can be filtered and pivoted in a
+    spreadsheet. Axis D is one column, its values separated by `|` in the delivered order
+    ("most important first"). Written as **UTF-8 with BOM** and separated by
+    **semicolons** — a deliberate deviation from `csv_export.py`, which exports document
+    tables for tools and keeps its plain comma form; this file is opened by a double
+    click in a German Excel.
+  - `Aenderungen_nach_Komponente_<run>.md` — the same material grouped by **affected
+    component** instead of by chapter: an overview table of component against normative
+    direction, then one section per vocabulary value in the order of
+    `AFFECTED_COMPONENTS` (not by frequency, so two runs stay comparable), then `other:`
+    with its free labels and a section for interpretations that name no component. An
+    interpretation naming several components appears in each of their sections; the axis
+    is multi-valued and hiding that would misrepresent it. On the 4110 run 1595
+    interpretations produce 2352 entries, 59 % of them appearing exactly once.
+  - A short marker `[narrowed · relaxed · scope, limit_value]` behind the existing label
+    in the final synopsis and in the annotated HTML, which also carries the abstention
+    reason (`indeterminate_reason`) as a tooltip. The axis values are shown in their
+    neutral schema wording: 27 of 36 have no German rendering yet, and a half-translated
+    marker would read as two vocabularies at once. `semantic_label` and `obligation` stay
+    where they are, and the slide deck is untouched — slides are for the overview.
+  - A run written before the axes existed keeps working: empty cells in the CSV, no
+    marker, and a component view that says why it is empty. Shown on a real pre-axes run
+    (`out/60909_deutung`, 1048 interpretations, not one axis field) through the whole
+    report stage, not only in a test.
 - Four orthogonal axes on every interpretation, next to the two fields they will
   eventually replace (ENT-01): `structural_operation` (A), `semantic_status` (B),
   `normative_direction` (C) and `affected_components` (D). The flat `semantic_label`
