@@ -8,6 +8,34 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Interpretation without an API: the prompts go out, the answers come back in.** The
+  answer cache is keyed on `model + system prompt + user prompt` and knows nothing about
+  the provider, so a JSON file under the right key *is* an interpretation — the pipeline
+  will not ask about that chapter again. Two tools make that usable when no API budget is
+  left.
+  - `tools/pending_prompts.py --dir <run> --work <dir>` rebuilds every request a run over
+    that directory would send — with the production code, split blocks included — and
+    exports only those with no cache file: one raw prompt per file, the `system_prompt.txt`
+    that carries the interpretation rules, and a `manifest.json` with key, chapter, block
+    and the change indices of each. Measured on the two production runs: **52 open prompts
+    for 4110** (940 528 characters, median 15 779, max 47 290) and **47 for 4120** (831 618,
+    median 14 814, max 45 051).
+  - **The key recipe is checked before anything is written.** Model and system prompt enter
+    every key alike, so if either is wrong no cached answer can be found at all — then the
+    tool aborts naming both, instead of producing answers the pipeline would never pick up.
+    A prompt whose *body* drifted since its answer was written is a different fact: it is
+    reported and asked again, which is what a run would do.
+  - `tools/apply_answer.py --work <dir> --answer NNNN --file <json>` (or `--batch <dir>`)
+    checks an answer and stores it atomically — **checking, not repairing**: parse (strict,
+    then lenient, and `repaired` is reported), expected keys, every `change_index` within
+    the block this prompt showed, pipeline-owned fields dropped and counted. A quote that
+    is not in the prompt is a **warning**, not a rejection; the evidence guard of the
+    pipeline stays the authority.
+  - `--status` reports what is answered by now and names what is missing, so an
+    interpretation spread over several nights resumes without bookkeeping: the cache is
+    the progress.
+  - `run_deutung`'s prompt building moved into `chapter_jobs()`, so tool and pipeline ask
+    the same question from the same code path, character for character.
 - **The tables reach the model whole, and every cut says so.** The cell text of a table
   was capped at 1100 characters and the whole table/figure block at 6500 — both without a
   word in the prompt. That hit 115 of 233 tables in the 4110 run and 89 of 171 in 4120:
