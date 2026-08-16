@@ -8,6 +8,35 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Every change is asked about, not only the most important forty.** A chapter prompt
+  was capped at 40 changes and the rest was dropped without a word: 714 of 2506 changes
+  in the 4110 run (28.5 %) and 552 of 2065 in 4120 (26.7 %) never reached the model, in
+  the professionally most important chapters — the proof procedures, the definitions,
+  the connection conditions. Whoever built training material from the result held it for
+  complete.
+  - A chapter with more changes than fit into one request is now **split into blocks** of
+    `MAX_CHANGES_PER_REQUEST` (40). The priority order is untouched, so block 1 holds the
+    same 40 changes as before and renders byte-identical to the previous prompt: a repeat
+    run pays for the new blocks only (proven on both production runs, 163 and 145 cached
+    answers hit again, 0 orphans). Tables and figures travel with block 1 alone.
+  - The answers are merged by `change_index`; if two blocks claim the same one, the
+    **earlier** block wins and the collision is counted.
+  - Cost, measured on the finished runs: 24 extra requests for 4110 and 20 for 4120,
+    370 kB and 270 kB of extra prompt.
+- A second, **lenient parse** of an answer that the strict parser rejects
+  (`json.loads(..., strict=False)`): a raw control character inside a string made three
+  complete answers unusable across the two runs. Such an answer counts as `repaired`,
+  never as `ok` — how often the model delivers invalid JSON has to stay countable. There
+  is no third attempt: cutting, bracket-balancing or regex patching would invent content.
+- **The coverage is reported.** `Änderungen: 2506, davon gedeutet 2506 (100,0 %)` in the
+  console summary, with the split chapters, the repaired answers and every chapter that
+  still has uninterpreted changes named. The same numbers machine-readable in
+  `pipeline_feedback` (phase `deutung`, field `coverage`) and in `deutung.json` under
+  `coverage`. Below 100 % the two AP-17 deliverables say so as well: a head note in
+  `Aenderungen_nach_Komponente_<run>.md` and a companion file
+  `Aenderungen_<run>_Abdeckung.txt` beside the change CSV, which cannot carry prose
+  itself.
+
 - A reason for every chapter that has no interpretation, and a summary at the end of the
   stage that is printed whether anything failed or not. Two production runs lost 8 of 171
   and 10 of 155 chapters — the ones with the most changes, which is to say the ones that
