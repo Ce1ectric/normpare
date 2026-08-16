@@ -1306,7 +1306,9 @@ def answer_summary(n_chapters: int, n_interpreted: int, lost: list[dict],
         if len(names) > SUMMARY_NAMES:
             shown += f", … (+{len(names) - SUMMARY_NAMES} weitere)"
         lines.append(f"    {bucket:<14}{len(names):>4}   {shown}")
-    if lost and prompt_dir is not None:
+    # only the two reasons that write a file are worth pointing at; an export run has no
+    # .FAILED.txt to look into
+    if prompt_dir is not None and {OUTCOME_TRUNCATED, OUTCOME_UNPARSABLE} & set(buckets):
         lines.append(f"    -> Prompts und Rohantworten in {prompt_dir}/*.FAILED.txt")
     return lines
 
