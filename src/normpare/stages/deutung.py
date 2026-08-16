@@ -14,7 +14,7 @@ import re
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import NamedTuple, Protocol, runtime_checkable
 
 from ..text.textnorm import n2, split_sentences
 
@@ -1129,6 +1129,66 @@ def build_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str,
                                  max_changes)[0]
 
 
+class ChapterJob(NamedTuple):
+    """Everything one chapter asks for: its blocks, their tags and the excerpts."""
+
+    ch: dict
+    section_id: str
+    mapping_id: str
+    tags: list[str]
+    parts: list[tuple[str, list[int]]]
+    old_excerpt: str
+    new_excerpt: str
+
+
+def section_index(doc: dict) -> dict:
+    """``{section id: section}`` of a ``norm_doc.json``."""
+    return {s["id"]: s for s in doc["sections"]}
+
+
+def section_excerpt(secs: dict, ids) -> str:
+    """The paragraph text of the given sections, as it goes into a prompt."""
+    txt = []
+    for sid in ids or []:
+        s = secs.get(sid)
+        if s:
+            txt.append(" ".join(p.get("n1", p.get("n0", "")) for p in s["paragraphs"]))
+    return " ".join(txt)
+
+
+def chapter_jobs(synopse: dict, o_secs: dict, n_secs: dict, scope: str = "core",
+                 asset_notes: list | None = None) -> list[ChapterJob]:
+    """Every request a run over this synopse would send, in the order it sends them.
+
+    Phase 1 of :func:`run_deutung`, and the only place that decides it: a chapter with
+    more changes than fit into one request is split into several (AP-19), and the tag
+    routes the answer back to its chapter and names the exported prompt file, so it has
+    to be unique -- it is built from the mapping id (ENT-24), a later block appends its
+    number. ``asset_notes`` collects what the table budgets cut, per chapter.
+
+    Separate from :func:`run_deutung` so that a tool outside the pipeline can ask what
+    the pipeline would ask, character for character, instead of rebuilding it (AP-21).
+    """
+    jobs: list[ChapterJob] = []
+    for ch in synopse["chapters"]:
+        substantive = [c for c in ch["changes"] if not c.get("semantic_equal")]
+        if scope == "core" and not substantive and not ch.get("part_changed"):
+            continue
+        old_x = section_excerpt(o_secs, ch.get("old_ids"))
+        new_x = section_excerpt(n_secs, ch.get("new_ids"))
+        notes: list[dict] = []
+        parts = build_chapter_prompts(ch, old_x, new_x, o_secs, n_secs, notes=notes)
+        cid = ch.get("new_id") or ch.get("old_id")
+        mid = ch.get("mapping_id") or str(cid)
+        tag = re.sub(r"[^\w.]", "_", mid)
+        tags = [tag if n == 0 else f"{tag}.T{n + 1}" for n in range(len(parts))]
+        # the chapter a clipped table belongs to is known here, not down in the renderer
+        if asset_notes is not None:
+            asset_notes += [{"section_id": cid, "mapping_id": mid, **note} for note in notes]
+        jobs.append(ChapterJob(ch, cid, mid, tags, parts, old_x, new_x))
+    return jobs
+
+
 def merge_chapter_answers(blocks: list[tuple[dict | None, list[int]]]
                           ) -> tuple[dict | None, list[int], int]:
     """Fold the answers of one chapter's blocks into one chapter interpretation.
@@ -1617,45 +1677,18 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     deutung_provider replaces the source of the answers (see :class:`DeutungProvider`);
     the default is a :class:`LiveProvider` built from the arguments above, so existing
     callers are unaffected."""
-    o_secs = {s["id"]: s for s in old_doc["sections"]}
-    n_secs = {s["id"]: s for s in new_doc["sections"]}
+    o_secs, n_secs = section_index(old_doc), section_index(new_doc)
     Path(out_dir).mkdir(parents=True, exist_ok=True)   # LiveProvider used to do this
     answer_source = deutung_provider or LiveProvider(
         root, model, out_dir / "llm_cache", out_dir / "llm_prompts",
         provider=provider, base_url=base_url, key_env=key_env, api_version=api_version,
         batch=batch, system=build_system_prompt(language, title))
 
-    def sec_excerpt(secs, ids):
-        txt = []
-        for sid in ids:
-            s = secs.get(sid)
-            if s:
-                txt.append(" ".join(p.get("n1", p.get("n0", "")) for p in s["paragraphs"]))
-        return " ".join(txt)
-
     # ---- phase 1: build the prompts of every in-scope chapter --------------------
     # A chapter with more changes than fit into one request is split into several
     # (AP-19); block 1 is the prompt an unsplit chapter would get, down to the byte.
-    jobs = []          # (ch, cid, mid, tags, parts, old_x, new_x)
     asset_notes: list[dict] = []       # what the table/block budgets cut, per chapter
-    for ch in synopse["chapters"]:
-        substantive = [c for c in ch["changes"] if not c.get("semantic_equal")]
-        if scope == "core" and not substantive and not ch.get("part_changed"):
-            continue
-        old_x = sec_excerpt(o_secs, ch.get("old_ids") or [])
-        new_x = sec_excerpt(n_secs, ch.get("new_ids") or [])
-        notes: list[dict] = []
-        parts = build_chapter_prompts(ch, old_x, new_x, o_secs, n_secs, notes=notes)
-        cid = ch.get("new_id") or ch.get("old_id")
-        # the tag routes the answer back to its chapter and names the exported prompt
-        # file, so it has to be unique: it is built from the mapping id (ENT-24), and a
-        # later block appends its number
-        mid = ch.get("mapping_id") or str(cid)
-        tag = re.sub(r"[^\w.]", "_", mid)
-        tags = [tag if n == 0 else f"{tag}.T{n + 1}" for n in range(len(parts))]
-        # the chapter a clipped table belongs to is known here, not down in the renderer
-        asset_notes += [{"section_id": cid, "mapping_id": mid, **note} for note in notes]
-        jobs.append((ch, cid, mid, tags, parts, old_x, new_x))
+    jobs = chapter_jobs(synopse, o_secs, n_secs, scope, asset_notes)
 
     # ---- phase 2: resolve the answers --------------------------------------------
     # The provider decides how: batch mode submits every uncached chapter in one

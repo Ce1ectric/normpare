@@ -23,7 +23,11 @@ from pathlib import Path
 
 import pytest
 
-from normpare.stages.deutung import build_chapter_prompts, build_system_prompt, cache_key
+from normpare.stages.deutung import (
+    build_chapter_prompts,
+    build_system_prompt,
+    cache_key,
+)
 
 MODEL = "test-model"
 TITLE = "TR-X_1000_neu"
@@ -165,7 +169,8 @@ def test_cached_prompts_are_skipped(tmp_path, pending_prompts, capsys):
     assert rc == 0
     entries = _manifest(work)["prompts"]
     assert [e["chapter"] for e in entries] == ["9.3"]
-    assert sorted(p.name for p in work.glob("*.txt")) == [entries[0]["file"]]
+    assert sorted(p.name for p in work.glob("*.txt")) == [entries[0]["file"],
+                                                          "system_prompt.txt"]
     assert MODEL in text                       # the model in use is always reported
     assert "1" in text and "2" in text         # 2 prompts, 1 cached, 1 open
 
@@ -226,8 +231,12 @@ def test_the_manifest_matches_the_files(tmp_path, pending_prompts):
     manifest = _manifest(work)
     entries = manifest["prompts"]
     assert len(entries) == 3                                  # 1 + 2 blocks
-    assert len(list(work.glob("*.txt"))) == 3
     assert manifest["model"] == MODEL
+    # the exported chapter file is the *user* prompt; the instructions live in the system
+    # prompt, so whoever interprets needs it too -- and it is half of every key
+    system = work / "system_prompt.txt"
+    assert system.read_text(encoding="utf-8") == build_system_prompt("de", TITLE)
+    assert len(list(work.glob("*.txt"))) == 4                 # 3 prompts + the system one
     for e in entries:
         path = work / e["file"]
         text = path.read_text(encoding="utf-8")
