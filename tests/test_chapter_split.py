@@ -378,3 +378,33 @@ def test_the_deliverables_note_incomplete_coverage(tmp_path):
                                 tmp_path / "Komponenten.md", "4110 alt<->neu",
                                 date="2026-08-16")
     assert "71,5 %" in path.read_text(encoding="utf-8")
+
+
+def test_the_csv_gets_a_companion_note_when_incomplete(tmp_path):
+    """The CSV itself must stay machine-readable, so the note travels beside it.
+
+    A comment line in front of the header would turn the column names into data for
+    every reader of the file; the note is a text file next to it instead, written only
+    when something is missing.
+    """
+    from normpare.report.changes_csv import COVERAGE_NOTE_SUFFIX, build_changes_csv
+
+    coverage = {"n_changes": 2506, "n_interpreted": 1792, "n_split_chapters": 10,
+                "n_extra_requests": 32, "n_collisions": 0, "n_repaired": 3,
+                "incomplete": [{"section_id": "11.2", "mapping_id": "11.2+11.2",
+                                "n_changes": 200, "n_interpreted": 40}]}
+    csv_path = tmp_path / "Aenderungen_run.csv"
+    build_changes_csv({"chapters": []}, {"chapters": [], "coverage": coverage}, csv_path)
+    note = csv_path.with_name(csv_path.stem + COVERAGE_NOTE_SUFFIX)
+
+    assert note.exists()
+    headline = note.read_text(encoding="utf-8").splitlines()[0]
+    assert "1792" in headline and "2506" in headline and "71,5 %" in headline
+    # the CSV keeps its own first line
+    assert csv_path.read_text(encoding="utf-8-sig").splitlines()[0].startswith("section_id;")
+
+    # complete coverage writes no note -- and removes a stale one from an earlier run
+    build_changes_csv({"chapters": []},
+                      {"chapters": [], "coverage": dict(coverage, n_interpreted=2506,
+                                                        incomplete=[])}, csv_path)
+    assert not note.exists()

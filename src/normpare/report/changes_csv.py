@@ -16,6 +16,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from ..stages.deutung import coverage_percent, format_percent
 from .axes import change_rows
 
 #: The columns, in this order. Axis D is one column (see :data:`COMPONENT_SEPARATOR`),
@@ -36,6 +37,34 @@ ENCODING = "utf-8-sig"
 #: Axis D is multi-valued and stays in one cell: the pipe survives a text filter and
 #: appears in no value of the vocabulary.
 COMPONENT_SEPARATOR = "|"
+
+
+#: The companion text beside the CSV, named after it. The note cannot go *into* the file:
+#: a line in front of the header would make the column names data for every reader, and
+#: this export exists to be read by a program and by Excel (AP-19).
+COVERAGE_NOTE_SUFFIX = "_Abdeckung.txt"
+
+
+def coverage_note(coverage: dict | None) -> str:
+    """The companion text when the run interpreted only part of its changes, else ``""``.
+
+    First line is the headline: how many of how many, in percent. Everything a reader of
+    the spreadsheet needs to know before filtering it into a course outline.
+    """
+    if not coverage or coverage.get("n_interpreted", 0) >= coverage.get("n_changes", 0):
+        return ""
+    missing = coverage["n_changes"] - coverage["n_interpreted"]
+    lines = [(f"UNVOLLSTÄNDIG: {coverage['n_interpreted']} von {coverage['n_changes']} "
+              f"Änderungen sind gedeutet ({format_percent(coverage_percent(coverage))} %)."),
+             "",
+             (f"Die übrigen {missing} Änderungen sind deterministisch erfasst, aber "
+              "ungedeutet — sie"),
+             ("haben in dieser Datei keine Zeile. Betroffene Kapitel "
+              "(ungedeutet von gesamt):"), ""]
+    lines += [f"  {c['mapping_id'] or c['section_id']}: "
+              f"{c['n_changes'] - c['n_interpreted']} von {c['n_changes']}"
+              for c in coverage.get("incomplete") or []]
+    return "\n".join(lines) + "\n"
 
 
 def _cell(row: dict, column: str) -> str:
@@ -59,5 +88,17 @@ def write_changes_csv(rows: list[dict], out_path: str | Path) -> Path:
 
 def build_changes_csv(synopse: dict | None, deutung: dict | None,
                       out_path: str | Path) -> Path:
-    """Write ``Aenderungen_<run>.csv`` beside the other deliverables."""
-    return write_changes_csv(change_rows(synopse, deutung), out_path)
+    """Write ``Aenderungen_<run>.csv`` beside the other deliverables.
+
+    Incomplete coverage adds ``Aenderungen_<run>_Abdeckung.txt``; complete coverage
+    removes it, so a repeat run into the same directory cannot leave a warning behind
+    that no longer holds.
+    """
+    out = write_changes_csv(change_rows(synopse, deutung), out_path)
+    note = out.with_name(out.stem + COVERAGE_NOTE_SUFFIX)
+    text = coverage_note((deutung or {}).get("coverage"))
+    if text:
+        note.write_text(text, encoding="utf-8")
+    elif note.exists():
+        note.unlink()
+    return out

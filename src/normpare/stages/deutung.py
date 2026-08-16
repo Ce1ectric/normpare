@@ -46,14 +46,25 @@ LANGUAGE_NAMES = {"de": "German", "en": "English", "fr": "French", "es": "Spanis
 #: chapters that two production runs lost were truncated this way. 48000 gives a good
 #: three times the room the largest chapter needed; the remaining case is now *reported*
 #: (see :data:`ANSWER_OUTCOMES`) instead of disappearing, and can be handled by hand.
-#: Splitting a chapter over several requests would be more robust but buys a new source
-#: of error (prompt building, merging) -- deliberately not done here.
+#: The budget stays per *request*, and a request asks about at most
+#: :data:`MAX_CHANGES_PER_REQUEST` changes -- a chapter with more of them is split
+#: (AP-19), so the answer length stays structurally bounded however large a chapter is.
 MAX_ANSWER_TOKENS = 48000
+
+#: How many changes one request asks about. The selection is by priority (value change,
+#: modality shift, new/removed obligation), so block 1 holds the most relevant ones.
+#: Until AP-19 everything beyond this number was silently dropped: 714 of 2506 changes in
+#: the 4110 run, 552 of 2065 in 4120, in the professionally most important chapters.
+MAX_CHANGES_PER_REQUEST = 40
 
 #: Why a chapter has an interpretation, or has none. ``api_error`` never stands alone: it
 #: carries the API's own error type (``api_error:overloaded_error``), because "error" says
 #: nothing about whether a repeat run would help.
 OUTCOME_OK = "ok"
+OUTCOME_REPAIRED = "repaired"          # only readable with strict=False: a raw control
+                                       # character in a string. A usable answer, but not
+                                       # a clean one -- how often the model delivers
+                                       # invalid JSON has to stay countable (AP-19).
 OUTCOME_TRUNCATED = "truncated"        # stop_reason == max_tokens: the answer was cut off
 OUTCOME_UNPARSABLE = "unparsable"      # complete answer, no valid JSON in it
 OUTCOME_API_ERROR = "api_error:"       # prefix, completed by the type the API reported
@@ -417,6 +428,26 @@ def cache_key(model: str, system: str, user: str) -> str:
     return hashlib.sha1((model + "\x00" + system + "\x00" + user).encode()).hexdigest()
 
 
+def load_json_answer(txt: str) -> tuple[dict, str]:
+    """Parse an answer strictly, then leniently; report which of the two it took.
+
+    ``json.loads(txt, strict=False)`` accepts a raw control character inside a string --
+    3 of the 18 chapters the two production runs lost fail for exactly that reason and
+    for no other (AP-18, question 6.2). The lenient pass is the **only** second attempt:
+    cutting the text, balancing brackets or patching it with a regular expression would
+    silently produce content nobody wrote.
+
+    Returns:
+        ``(data, OUTCOME_OK)`` or ``(data, OUTCOME_REPAIRED)``.
+    Raises:
+        json.JSONDecodeError: if neither pass reads the text.
+    """
+    try:
+        return json.loads(txt), OUTCOME_OK
+    except json.JSONDecodeError:
+        return json.loads(txt, strict=False), OUTCOME_REPAIRED
+
+
 def api_error_type(err: BaseException | None) -> str:
     """The error type the API itself reported, the exception class as a fallback.
 
@@ -557,12 +588,12 @@ class LlmClient:
         """
         txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", (txt or "").strip())
         try:
-            data = json.loads(txt)
+            data, outcome = load_json_answer(txt)
         except json.JSONDecodeError:
             self._failed(tag, user, txt,
                          OUTCOME_TRUNCATED if stop_reason == "max_tokens" else OUTCOME_UNPARSABLE)
             return None
-        self.outcomes[tag] = OUTCOME_OK
+        self.outcomes[tag] = outcome
         self._cache_key(user).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return data
 
@@ -648,9 +679,9 @@ class LlmClient:
             try:
                 txt, stop_reason = self._complete(user, max_tokens)
                 txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", txt.strip())
-                data = json.loads(txt)
+                data, outcome = load_json_answer(txt)
                 cp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-                self.outcomes[tag] = OUTCOME_OK
+                self.outcomes[tag] = outcome
                 return data
             except json.JSONDecodeError:
                 if attempt == self.max_retries - 1:
@@ -953,10 +984,14 @@ def _asset_evidence_ok(ev: str, hay: str) -> bool:
     return all(z in hay for z in zellen)
 
 
-def build_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str,
-                         o_secs: dict | None = None, n_secs: dict | None = None,
-                         max_changes: int = 40) -> tuple[str, list[int]]:
-    """Prompt + list of included change indices (priority: value/modality/new)."""
+def changes_by_priority(ch: dict) -> list[int]:
+    """The chapter's change indices, most relevant first.
+
+    Value change +4, modality shift +3, a new or dropped ``muss``/``darf nicht`` +3, a
+    move +1, length up to +1, semantically equal -5. Unchanged since the stage exists:
+    the order decides which changes a run asks about first, and splitting a chapter over
+    several requests (AP-19) must not disturb it.
+    """
     idx = list(range(len(ch["changes"])))
 
     def prio(i):
@@ -976,18 +1011,34 @@ def build_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str,
             p -= 5
         return -p
     idx.sort(key=prio)
-    sel = sorted(idx[:max_changes])
+    return idx
 
+
+def render_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str, sel: list[int],
+                          o_secs: dict | None = None, n_secs: dict | None = None,
+                          part: int = 1, n_parts: int = 1) -> str:
+    """One request about the changes ``sel`` of this chapter.
+
+    ``part``/``n_parts`` name the block in the counter line for a split chapter. Part 1
+    renders **exactly** as an unsplit chapter does -- no part marker, and the assets --
+    so that a chapter which is split today still hits the answer cache of a run made
+    before the split (AP-19).
+    """
     cid = ch.get("new_id") or ch.get("old_id")
+    of_parts = f", Teil {part} von {n_parts}" if part > 1 else ""
     head = [f"KAPITEL {cid} — {ch['title']}  (Teil: {ch['part']}"
             + (", NORMATIV/INFORMATIV-STATUS GEÄNDERT!" if ch.get("part_changed") else "") + ")",
             f"Kapitel-Modus: {ch['mode']}; nicht geänderte Absätze: {ch.get('n_identical', 0)}",
             "", "AUSZUG ALTE FASSUNG:", _clip(old_excerpt, 1600) or "(Kapitel existiert in der alten Fassung nicht)",
             "", "AUSZUG NEUE FASSUNG:", _clip(new_excerpt, 1600) or "(Kapitel in der neuen Fassung entfallen)",
-            "", f"ÄNDERUNGEN ({len(sel)} von {len(ch['changes'])}, deterministisch ermittelt):"]
+            "", (f"ÄNDERUNGEN ({len(sel)} von {len(ch['changes'])}{of_parts}, "
+                 "deterministisch ermittelt):")]
     for i in sel:
         head.append(_change_block(i, ch["changes"][i]))
-    assets = chapter_assets_block(ch, o_secs, n_secs) if (o_secs is not None and n_secs is not None) else ""
+    # tables and figures travel with block 1 only: asked in every block they would be
+    # interpreted n times, and the merge would have to undo that for no gain
+    assets = (chapter_assets_block(ch, o_secs, n_secs)
+              if (o_secs is not None and n_secs is not None and part == 1) else "")
     if assets:
         head.append(assets)
     from .keywords import TAXONOMY
@@ -1000,7 +1051,72 @@ def build_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str,
         task = "AUFGABE: Erzeuge das folgende JSON (deutungen für ALLE oben gelisteten Indizes):"
     head += ["", "VERFÜGBARE SCHLAGWORTE (wähle 1-4 passende): " + " | ".join(TAXONOMY.keys()),
              "", task, schema]
-    return "\n".join(head), sel
+    return "\n".join(head)
+
+
+def build_chapter_prompts(ch: dict, old_excerpt: str, new_excerpt: str,
+                          o_secs: dict | None = None, n_secs: dict | None = None,
+                          max_changes: int = MAX_CHANGES_PER_REQUEST
+                          ) -> list[tuple[str, list[int]]]:
+    """Every request this chapter needs: ``(prompt, included change indices)`` per block.
+
+    The changes are ordered by priority and then cut into blocks of ``max_changes``, so
+    block 1 holds the same most relevant changes as before and every further change ends
+    up in exactly one later block instead of being dropped (AP-19). A chapter that fits
+    into one request yields one block, character-identical to the previous prompt.
+    """
+    order = changes_by_priority(ch)
+    blocks = [sorted(order[i:i + max_changes]) for i in range(0, len(order), max_changes)]
+    blocks = blocks or [[]]              # a chapter without changes still asks once
+    return [(render_chapter_prompt(ch, old_excerpt, new_excerpt, sel, o_secs, n_secs,
+                                   part=n + 1, n_parts=len(blocks)), sel)
+            for n, sel in enumerate(blocks)]
+
+
+def build_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str,
+                         o_secs: dict | None = None, n_secs: dict | None = None,
+                         max_changes: int = MAX_CHANGES_PER_REQUEST) -> tuple[str, list[int]]:
+    """Prompt + list of included change indices (priority: value/modality/new).
+
+    The first block of :func:`build_chapter_prompts`, i.e. the whole chapter as long as it
+    fits into one request. Kept for callers that ask one question per chapter.
+    """
+    return build_chapter_prompts(ch, old_excerpt, new_excerpt, o_secs, n_secs,
+                                 max_changes)[0]
+
+
+def merge_chapter_answers(blocks: list[tuple[dict | None, list[int]]]
+                          ) -> tuple[dict | None, list[int], int]:
+    """Fold the answers of one chapter's blocks into one chapter interpretation.
+
+    Merged by ``change_index``; if two blocks claim the same one, the **earlier** block
+    wins -- it was shown the higher-priority changes -- and the collision is counted.
+    Chapter-level fields (summaries, tables, figures) come from the first block that
+    answered at all.
+
+    Returns:
+        ``(interpretation or None, interpreted change indices, collisions)``.
+    """
+    merged: dict | None = None
+    seen: dict = {}
+    interpreted: list[int] = []
+    collisions = 0
+    for data, sel in blocks:
+        if data is None:
+            continue
+        if merged is None:
+            merged = dict(data)
+            merged["interpretations"] = []
+        interpreted += sel
+        for d in data.get("interpretations") or []:
+            key = d.get("change_index")
+            if key is not None and key in seen:
+                collisions += 1
+                continue
+            if key is not None:
+                seen[key] = d
+            merged["interpretations"].append(d)
+    return merged, sorted(set(interpreted)), collisions
 
 
 # ------------------------------------------------------------------ Fallback & Guard
@@ -1282,16 +1398,91 @@ def _outcome_bucket(reason: str) -> str:
     return reason.split(":", 1)[0]
 
 
+def coverage_report(results: list[dict], n_split_chapters: int, n_extra_requests: int,
+                    n_collisions: int, n_repaired: int) -> dict:
+    """How much of the compared material actually carries an interpretation.
+
+    A chapter counts what it was *asked* about: before AP-19 that was at most 40 changes
+    per chapter whatever its size, which left 28.5 % of the 4110 run uninterpreted with
+    nothing saying so. ``incomplete`` names every chapter that still has changes without
+    an interpretation, with both numbers.
+    """
+    total = sum(r.get("_changes_total", 0) for r in results)
+    done = sum(len(r.get("_changes_interpreted") or []) for r in results)
+    return {
+        "n_changes": total, "n_interpreted": done,
+        "n_split_chapters": n_split_chapters, "n_extra_requests": n_extra_requests,
+        "n_collisions": n_collisions, "n_repaired": n_repaired,
+        "incomplete": [{"section_id": r.get("section_id"), "mapping_id": r.get("mapping_id"),
+                        "n_changes": r.get("_changes_total", 0),
+                        "n_interpreted": len(r.get("_changes_interpreted") or [])}
+                       for r in results
+                       if len(r.get("_changes_interpreted") or []) < r.get("_changes_total", 0)],
+    }
+
+
+def coverage_percent(coverage: dict) -> float:
+    """Share of interpreted changes in percent; a run without changes is complete."""
+    total = coverage.get("n_changes") or 0
+    return 100.0 if not total else coverage.get("n_interpreted", 0) / total * 100
+
+
+def format_percent(value: float) -> str:
+    """German decimal comma -- the console and the deliverables are read in German."""
+    return f"{value:.1f}".replace(".", ",")
+
+
+def coverage_lines(coverage: dict) -> list[str]:
+    """The coverage part of the console summary: how much, split how, and what is missing."""
+    lines = [(f"    Änderungen: {coverage['n_changes']}, davon gedeutet "
+              f"{coverage['n_interpreted']} "
+              f"({format_percent(coverage_percent(coverage))} %)")]
+    if coverage["n_split_chapters"]:
+        lines.append(f"    Kapitel in Teilanfragen: {coverage['n_split_chapters']} "
+                     f"({coverage['n_extra_requests']} Zusatzanfragen)")
+    if coverage["n_repaired"]:
+        lines.append(f"    repariert: {coverage['n_repaired']}")
+    if coverage["n_collisions"]:
+        lines.append(f"    Index-Kollisionen: {coverage['n_collisions']} "
+                     f"(der frühere Block gilt)")
+    if coverage["incomplete"]:
+        names = [f"{c['mapping_id'] or c['section_id']} "
+                 f"({c['n_changes'] - c['n_interpreted']} von {c['n_changes']})"
+                 for c in coverage["incomplete"]]
+        shown = ", ".join(names[:SUMMARY_NAMES])
+        if len(names) > SUMMARY_NAMES:
+            shown += f", … (+{len(names) - SUMMARY_NAMES} weitere)"
+        lines.append(f"    ungedeutet: {shown}")
+    return lines
+
+
+def coverage_feedback(coverage: dict) -> dict:
+    """The coverage as one machine-readable ``pipeline_feedback`` entry of phase
+    ``deutung`` -- the same numbers the console prints, for a later comparison."""
+    return {"section_id": None, "phase": "deutung", "field": "coverage", **coverage,
+            "count": coverage["n_changes"] - coverage["n_interpreted"],
+            "finding": (f"{coverage['n_interpreted']} of {coverage['n_changes']} changes "
+                        f"were interpreted ({format_percent(coverage_percent(coverage))} %); "
+                        f"{coverage['n_split_chapters']} chapter(s) were split into "
+                        f"{coverage['n_extra_requests']} extra request(s), "
+                        f"{coverage['n_collisions']} change index collision(s), "
+                        f"{coverage['n_repaired']} answer(s) only readable leniently")}
+
+
 def answer_summary(n_chapters: int, n_interpreted: int, lost: list[dict],
-                   prompt_dir: Path | str | None = None) -> list[str]:
+                   prompt_dir: Path | str | None = None,
+                   coverage: dict | None = None) -> list[str]:
     """The console summary of the interpretation stage, one line per reason.
 
     Args:
         lost: ``{"mapping_id", "reason"}`` per chapter without an interpretation.
         prompt_dir: where the prompts and raw answers were kept, named in the last line.
+        coverage: :func:`coverage_report`; how much of the material was interpreted.
     """
     lines = [(f"  Deutung: {n_chapters} Kapitel, {n_interpreted} gedeutet, "
               f"{len(lost)} ohne Deutung")]
+    if coverage is not None:
+        lines += coverage_lines(coverage)
     buckets: dict[str, list[str]] = {}
     for item in lost:
         bucket = _outcome_bucket(item["reason"])
@@ -1365,25 +1556,31 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                 txt.append(" ".join(p.get("n1", p.get("n0", "")) for p in s["paragraphs"]))
         return " ".join(txt)
 
-    # ---- phase 1: build one prompt per in-scope chapter --------------------------
-    jobs = []          # (ch, cid, mid, tag, prompt, sel, old_x, new_x)
+    # ---- phase 1: build the prompts of every in-scope chapter --------------------
+    # A chapter with more changes than fit into one request is split into several
+    # (AP-19); block 1 is the prompt an unsplit chapter would get, down to the byte.
+    jobs = []          # (ch, cid, mid, tags, parts, old_x, new_x)
     for ch in synopse["chapters"]:
         substantive = [c for c in ch["changes"] if not c.get("semantic_equal")]
         if scope == "core" and not substantive and not ch.get("part_changed"):
             continue
         old_x = sec_excerpt(o_secs, ch.get("old_ids") or [])
         new_x = sec_excerpt(n_secs, ch.get("new_ids") or [])
-        prompt, sel = build_chapter_prompt(ch, old_x, new_x, o_secs, n_secs)
+        parts = build_chapter_prompts(ch, old_x, new_x, o_secs, n_secs)
         cid = ch.get("new_id") or ch.get("old_id")
         # the tag routes the answer back to its chapter and names the exported prompt
-        # file, so it has to be unique: it is built from the mapping id (ENT-24)
+        # file, so it has to be unique: it is built from the mapping id (ENT-24), and a
+        # later block appends its number
         mid = ch.get("mapping_id") or str(cid)
-        jobs.append((ch, cid, mid, re.sub(r"[^\w.]", "_", mid), prompt, sel, old_x, new_x))
+        tag = re.sub(r"[^\w.]", "_", mid)
+        tags = [tag if n == 0 else f"{tag}.T{n + 1}" for n in range(len(parts))]
+        jobs.append((ch, cid, mid, tags, parts, old_x, new_x))
 
     # ---- phase 2: resolve the answers --------------------------------------------
     # The provider decides how: batch mode submits every uncached chapter in one
     # asynchronous batch (~50% cheaper), otherwise the chapters are asked one by one.
-    answers = answer_source.resolve([(j[3], j[4]) for j in jobs])
+    answers = answer_source.resolve([(tag, prompt) for _ch, _cid, _mid, tags, parts, *_ in jobs
+                                     for tag, (prompt, _sel) in zip(tags, parts)])
 
     # ---- phase 3: assemble, guard the evidence, collect the review queue ----------
     results = []
@@ -1392,8 +1589,19 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     lost: list[dict] = []          # chapters without an interpretation, with the reason
     outcomes = getattr(answer_source, "outcomes", None) or {}
     n_llm = 0
-    for ch, cid, mid, tag, prompt, sel, old_x, new_x in jobs:
-        data = answers.get(tag)
+    n_split = 0                    # chapters that needed more than one request
+    n_extra = 0                    # ... and how many requests that cost on top
+    n_collisions = 0               # two blocks claiming the same change index
+    n_repaired = 0                 # answers only readable with the lenient parse
+    for ch, cid, mid, tags, parts, old_x, new_x in jobs:
+        # one chapter, one interpretation -- however many requests it took to get it
+        data, sel, collisions = merge_chapter_answers(
+            [(answers.get(t), part_sel) for t, (_p, part_sel) in zip(tags, parts)])
+        n_collisions += collisions
+        n_repaired += sum(1 for t in tags if outcomes.get(t) == OUTCOME_REPAIRED)
+        if len(parts) > 1:
+            n_split += 1
+            n_extra += len(parts) - 1
         drops = Counter()          # field -> how often it arrived in this chapter
         supplied = {}              # field -> the discarded value, for the report
         invalid = Counter()        # (axis field, violation) -> how often in this chapter
@@ -1402,7 +1610,7 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
             # fallback: extractive -- and the reason it came to that is kept, so the run
             # can say which chapters it lost and why (AP-18)
             lost.append({"section_id": cid, "mapping_id": mid,
-                         "reason": outcomes.get(tag, OUTCOME_NO_ANSWER)})
+                         "reason": outcomes.get(tags[0], OUTCOME_NO_ANSWER)})
             data = {"section_id": cid,
                     "summary_old": extractive_summary(old_x),
                     "summary_new": extractive_summary(new_x),
@@ -1491,12 +1699,17 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     feedback += dropped
     # ... and what the run itself lost: which chapters have no interpretation, and why
     feedback += answer_feedback(len(results), n_llm, lost)
-    for line in answer_summary(len(results), n_llm, lost, out_dir / "llm_prompts"):
+    # ... and how much of the material carries an interpretation at all (AP-19)
+    coverage = coverage_report(results, n_split, n_extra, n_collisions, n_repaired)
+    feedback.append(coverage_feedback(coverage))
+    for line in answer_summary(len(results), n_llm, lost, out_dir / "llm_prompts",
+                               coverage=coverage):
         print(line)
     live = answer_source.live
     out = {"model": model if live else None, "mode": "api" if live else "export",
            "language": language,
-           "n_chapters": len(results), "n_llm": n_llm, "chapters": results,
+           "n_chapters": len(results), "n_llm": n_llm, "coverage": coverage,
+           "chapters": results,
            "review_queue": review, "pipeline_feedback": feedback}
     (out_dir / "deutung.json").write_text(json.dumps(out, ensure_ascii=False, indent=1),
                                           encoding="utf-8")

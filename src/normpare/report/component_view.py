@@ -14,7 +14,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..stages.deutung import AFFECTED_COMPONENTS, NORMATIVE_DIRECTIONS, OTHER_COMPONENT
+from ..stages.deutung import (
+    AFFECTED_COMPONENTS,
+    NORMATIVE_DIRECTIONS,
+    OTHER_COMPONENT,
+    coverage_percent,
+    format_percent,
+)
 from .axes import carries_axes, change_rows
 
 #: How many characters of the evidence the view shows -- enough to recognise the span,
@@ -45,6 +51,37 @@ _NO_INTERPRETATION_NOTE = (
     "> **Dieser Lauf enthält keine Deutung** (Vergleich ohne KI-Lauf). Die Abschnitte "
     "füllen sich, sobald die Deutungsstufe gelaufen ist."
 )
+
+
+#: How many chapters the coverage note names before it counts the rest.
+INCOMPLETE_NAMES = 8
+
+
+def coverage_note(coverage: dict | None) -> list[str]:
+    """The head note when not every change carries an interpretation (AP-19).
+
+    Only then: a warning that is always there is not read. Whoever builds a course from
+    this view has to know that 714 of 2506 changes are missing from it, and which
+    chapters they are missing from.
+    """
+    if not coverage or coverage.get("n_interpreted", 0) >= coverage.get("n_changes", 0):
+        return []
+    missing = coverage["n_changes"] - coverage["n_interpreted"]
+    names = [f"{c['mapping_id'] or c['section_id']} "
+             f"({c['n_changes'] - c['n_interpreted']} von {c['n_changes']})"
+             for c in coverage.get("incomplete") or []]
+    shown = ", ".join(names[:INCOMPLETE_NAMES])
+    if len(names) > INCOMPLETE_NAMES:
+        shown += f", … (+{len(names) - INCOMPLETE_NAMES} weitere)"
+    return [
+        f"> **Diese Unterlage ist unvollständig.** Von {coverage['n_changes']} "
+        f"Änderungen tragen {coverage['n_interpreted']} eine Deutung "
+        f"({format_percent(coverage_percent(coverage))} %); {missing} sind "
+        "deterministisch erfasst, aber ungedeutet und stehen deshalb in keinem Abschnitt "
+        "unten."
+        + (f" Betroffene Kapitel: {shown}." if shown else ""),
+        "",
+    ]
 
 
 def _shorten(text: str) -> str:
@@ -110,11 +147,12 @@ def _entry(row: dict) -> list[str]:
 
 
 def render_component_view(rows: list[dict], pair: str, date: str,
-                          carries: bool = True) -> str:
+                          carries: bool = True, coverage: dict | None = None) -> str:
     """The markdown text of the component view -- deterministic, derived from ``rows``.
 
     ``date`` is passed in rather than read from the clock, so the same run renders to the
-    same bytes twice.
+    same bytes twice. ``coverage`` (:func:`normpare.stages.deutung.coverage_report`) adds
+    the head note when the run interpreted only part of its changes.
     """
     buckets = _buckets(rows)
     entries = sum(len(v) for v in buckets.values())
@@ -133,6 +171,7 @@ def render_component_view(rows: list[dict], pair: str, date: str,
         "Läufen gleich.",
         "",
     ]
+    lines += coverage_note(coverage)
     if not rows:
         lines += [_NO_INTERPRETATION_NOTE, ""]
     elif not carries:
@@ -165,6 +204,7 @@ def build_component_view(synopse: dict | None, deutung: dict | None,
                               # UTC, like ``manifest.json`` -- the one value not derived
                               # from the run, which is why it can be passed in
                               date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                              carries=carries_axes(deutung)),
+                              carries=carries_axes(deutung),
+                              coverage=(deutung or {}).get("coverage")),
         encoding="utf-8")
     return out
