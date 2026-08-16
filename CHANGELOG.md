@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **The tables reach the model whole, and every cut says so.** The cell text of a table
+  was capped at 1100 characters and the whole table/figure block at 6500 — both without a
+  word in the prompt. That hit 115 of 233 tables in the 4110 run and 89 of 171 in 4120:
+  half of the tables, and tables are where the limit values live.
+  - `TABLE_CHARS = 8000` and `ASSET_BLOCK_CHARS = 32000` are named constants carrying the
+    measurement that justifies them: the largest rendered table of either corpus is 6752
+    characters and the largest block 29 694, so **no table and no block of either corpus
+    is clipped any more**. Cost, measured on both finished runs: +102 158 characters of
+    prompt for 4110 (+4.1 %) and +105 191 for 4120 (+5.1 %); 20 of 163 and 17 of 145
+    cached chapters get a new prompt, all others still hit the cache.
+  - A cap that does bite now **says so**: `… (gekürzt, +n Zeichen)` for a table,
+    `… (Block gekürzt, +n Zeichen)` for a block — the shape the row cap has always used.
+  - Every rendered table and block is **counted**, clipped or not, so the coverage report
+    can say `Tabellen gekürzt: 0 von 233` and mean a measured zero. The numbers appear in
+    the console summary, in `deutung.json` under `coverage` and in `pipeline_feedback`,
+    with chapter and table id for each cut. The row cap (`max_rows = 40`) is unchanged.
 - **Every change is asked about, not only the most important forty.** A chapter prompt
   was capped at 40 changes and the rest was dropped without a word: 714 of 2506 changes
   in the 4110 run (28.5 %) and 552 of 2065 in 4120 (26.7 %) never reached the model, in
