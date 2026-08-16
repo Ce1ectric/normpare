@@ -17,7 +17,10 @@ A fake Anthropic client stands in for the SDK; no test here touches the network.
 from __future__ import annotations
 
 import inspect
+import io
 import json
+import token
+import tokenize
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -258,5 +261,10 @@ def test_max_tokens_is_a_named_constant():
     assert MAX_ANSWER_TOKENS == 48000
     for fn in (LlmClient.ask_json, LlmClient.ask_json_batch):
         assert inspect.signature(fn).parameters["max_tokens"].default is MAX_ANSWER_TOKENS
+    # no number literal is the budget any more -- the comment explaining the old 16000 is
+    # exactly what the constant is for, so only executable tokens are checked
     source = Path(inspect.getfile(LlmClient)).read_text(encoding="utf-8")
-    assert "16000" not in source
+    numbers = [t.string for t in tokenize.generate_tokens(io.StringIO(source).readline)
+               if t.type == token.NUMBER]
+    assert "16000" not in numbers
+    assert numbers.count("48000") == 1        # only where the constant is defined

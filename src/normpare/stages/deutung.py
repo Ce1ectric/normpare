@@ -40,6 +40,33 @@ LABELS = {
 LANGUAGE_NAMES = {"de": "German", "en": "English", "fr": "French", "es": "Spanish",
                   "it": "Italian", "nl": "Dutch"}
 
+#: Token budget for one chapter answer. AP-18: at 16000 the answer to chapter 10.2.2 of
+#: the 4110 run ran into the limit and stopped inside a JSON string -- that chapter
+#: carries roughly 90 changes, and its truncated answer alone was 35 kB. 13 of the 18
+#: chapters that two production runs lost were truncated this way. 48000 gives a good
+#: three times the room the largest chapter needed; the remaining case is now *reported*
+#: (see :data:`ANSWER_OUTCOMES`) instead of disappearing, and can be handled by hand.
+#: Splitting a chapter over several requests would be more robust but buys a new source
+#: of error (prompt building, merging) -- deliberately not done here.
+MAX_ANSWER_TOKENS = 48000
+
+#: Why a chapter has an interpretation, or has none. ``api_error`` never stands alone: it
+#: carries the API's own error type (``api_error:overloaded_error``), because "error" says
+#: nothing about whether a repeat run would help.
+OUTCOME_OK = "ok"
+OUTCOME_TRUNCATED = "truncated"        # stop_reason == max_tokens: the answer was cut off
+OUTCOME_UNPARSABLE = "unparsable"      # complete answer, no valid JSON in it
+OUTCOME_API_ERROR = "api_error:"       # prefix, completed by the type the API reported
+OUTCOME_EXPORT = "export"              # no key: the prompt was written out, nothing asked
+OUTCOME_NO_ANSWER = "no_answer"        # a provider returned None without saying why
+
+#: Order the reasons are reported in -- fixed, so two runs read the same way.
+ANSWER_OUTCOMES = (OUTCOME_TRUNCATED, OUTCOME_API_ERROR.rstrip(":"), OUTCOME_UNPARSABLE,
+                   OUTCOME_EXPORT, OUTCOME_NO_ANSWER)
+
+#: How many chapter names one summary line shows before it counts the rest.
+SUMMARY_NAMES = 8
+
 
 # ------------------------------------------------------------------ four-axis taxonomy
 # ENT-01. One flat label cannot carry three statements at once, and ``semantic_label``
@@ -390,6 +417,20 @@ def cache_key(model: str, system: str, user: str) -> str:
     return hashlib.sha1((model + "\x00" + system + "\x00" + user).encode()).hexdigest()
 
 
+def api_error_type(err: BaseException | None) -> str:
+    """The error type the API itself reported, the exception class as a fallback.
+
+    ``overloaded_error`` is worth a repeat run, ``invalid_request_error`` is not -- a
+    generic "error" cannot tell the two apart (AP-18).
+    """
+    body = getattr(err, "body", None)
+    if isinstance(body, dict):
+        reported = (body.get("error") or {}).get("type")
+        if reported:
+            return str(reported)
+    return type(err).__name__ if err is not None else "unknown"
+
+
 class LlmClient:
     def __init__(self, root: Path, model: str, cache_dir: Path, export_dir: Path,
                  provider: str = "anthropic", base_url: str | None = None,
@@ -401,6 +442,8 @@ class LlmClient:
         self.cache_dir = cache_dir
         self.export_dir = export_dir
         self.max_retries = max_retries
+        #: tag -> why this chapter has an answer, or has none (see :data:`ANSWER_OUTCOMES`)
+        self.outcomes: dict[str, str] = {}
         self.api_version = api_version         # Azure only
         cache_dir.mkdir(parents=True, exist_ok=True)
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -432,7 +475,7 @@ class LlmClient:
         return self.cache_dir / f"{cache_key(self.model, self.system, user)}.json"
 
     # ---- provider calls -------------------------------------------------
-    def _complete_anthropic(self, user: str, max_tokens: int) -> str:
+    def _complete_anthropic(self, user: str, max_tokens: int) -> tuple[str, str | None]:
         # NOTE: no `temperature` here -- newer Anthropic models (e.g. claude-sonnet-5)
         # reject it as deprecated (HTTP 400). Determinism is not guaranteed at the API level
         # anyway; the response cache keeps re-runs stable.
@@ -453,9 +496,11 @@ class LlmClient:
         # collect all text blocks (a model may still prepend non-text blocks, so indexing
         # content[0] blindly can raise AttributeError); join their text robustly
         parts = [b.text for b in m.content if getattr(b, "type", None) == "text"]
-        return "".join(parts).strip()
+        # the stop reason travels with the text: "max_tokens" means the answer was cut off,
+        # which is a different defect from a malformed one (AP-18)
+        return "".join(parts).strip(), getattr(m, "stop_reason", None)
 
-    def _complete_openai_compatible(self, user: str, max_tokens: int) -> str:
+    def _complete_openai_compatible(self, user: str, max_tokens: int) -> tuple[str, str | None]:
         import urllib.request
         url = self.base_url.rstrip("/") + "/chat/completions"
         if self.provider == "azure_openai":
@@ -481,26 +526,49 @@ class LlmClient:
                                      headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=180) as r:
             resp = json.loads(r.read().decode("utf-8"))
-        return resp["choices"][0]["message"]["content"].strip()
+        choice = resp["choices"][0]
+        # OpenAI calls the same condition "length"; translated here so the stage sees one
+        # vocabulary regardless of the backend
+        stop = "max_tokens" if choice.get("finish_reason") == "length" else choice.get("finish_reason")
+        return choice["message"]["content"].strip(), stop
 
-    def _complete(self, user: str, max_tokens: int) -> str:
+    def _complete(self, user: str, max_tokens: int) -> tuple[str, str | None]:
         if self.provider == "anthropic":
             return self._complete_anthropic(user, max_tokens)
         return self._complete_openai_compatible(user, max_tokens)
 
-    def _parse_json_answer(self, txt: str, user: str, tag: str) -> dict | None:
-        """Strip code fences, parse JSON, cache on success; export the raw text on failure."""
+    def _failed(self, tag: str, user: str, txt: str, outcome: str) -> None:
+        """Record why a chapter has no answer and keep prompt *and* raw answer on disk.
+
+        Both belong in the file: the truncated answer to 10.2.2 was only recognisable as
+        truncated next to the prompt it belonged to (AP-18).
+        """
+        self.outcomes[tag] = outcome
+        (self.export_dir / f"{tag}.FAILED.txt").write_text(
+            f"OUTCOME: {outcome}\n\nSYSTEM:\n{self.system}\n\nUSER:\n{user}\n\nANSWER:\n{txt}",
+            encoding="utf-8")
+
+    def _parse_json_answer(self, txt: str, user: str, tag: str,
+                           stop_reason: str | None = None) -> dict | None:
+        """Strip code fences, parse JSON, cache on success; export the raw text on failure.
+
+        A failure that follows ``stop_reason == "max_tokens"`` is reported as truncation,
+        not as a parse error: only one of the two is cured by a larger budget.
+        """
         txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", (txt or "").strip())
         try:
             data = json.loads(txt)
         except json.JSONDecodeError:
-            (self.export_dir / f"{tag}.FAILED.txt").write_text(txt, encoding="utf-8")
+            self._failed(tag, user, txt,
+                         OUTCOME_TRUNCATED if stop_reason == "max_tokens" else OUTCOME_UNPARSABLE)
             return None
+        self.outcomes[tag] = OUTCOME_OK
         self._cache_key(user).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return data
 
     def ask_json_batch(self, items: list[tuple[str, str]],
-                       max_tokens: int = 16000, poll_s: int = 15) -> dict[str, dict | None]:
+                       max_tokens: int = MAX_ANSWER_TOKENS,
+                       poll_s: int = 15) -> dict[str, dict | None]:
         """Resolve many prompts at once via the Anthropic Message Batches API (~50% cheaper).
 
         Cached prompts are served from the cache; only the remainder is submitted. Batches are
@@ -518,6 +586,7 @@ class LlmClient:
             cp = self._cache_key(user)
             if cp.exists():
                 out[tag] = json.loads(cp.read_text(encoding="utf-8"))
+                self.outcomes[tag] = OUTCOME_OK
             else:
                 todo.append((tag, user))
         if not todo:
@@ -549,39 +618,53 @@ class LlmClient:
             if getattr(r.result, "type", None) != "succeeded":
                 err = getattr(getattr(r.result, "error", None), "type", r.result.type)
                 print(f"  [llm] Batch {tag}: {err} — extraktiver Fallback.")
+                self.outcomes[tag] = OUTCOME_API_ERROR + str(err)
                 out[tag] = None
                 continue
             txt = "".join(bl.text for bl in r.result.message.content
                           if getattr(bl, "type", None) == "text")
-            out[tag] = self._parse_json_answer(txt, user, tag)
+            out[tag] = self._parse_json_answer(
+                txt, user, tag, getattr(r.result.message, "stop_reason", None))
         for tag, _ in todo:                   # anything the API never returned
-            out.setdefault(tag, None)
+            if out.setdefault(tag, None) is None:
+                self.outcomes.setdefault(tag, OUTCOME_API_ERROR + "no_result")
         return out
 
-    def ask_json(self, user: str, tag: str, max_tokens: int = 16000) -> dict | None:
+    def ask_json(self, user: str, tag: str,
+                 max_tokens: int = MAX_ANSWER_TOKENS) -> dict | None:
         cp = self._cache_key(user)
         if cp.exists():
+            self.outcomes[tag] = OUTCOME_OK
             return json.loads(cp.read_text(encoding="utf-8"))
         if not self.live:
             (self.export_dir / f"{tag}.txt").write_text(
                 "SYSTEM:\n" + self.system + "\n\nUSER:\n" + user, encoding="utf-8")
+            self.outcomes[tag] = OUTCOME_EXPORT
             return None
         txt = ""
+        stop_reason = None
+        last_error = None
         for attempt in range(self.max_retries):
             try:
-                txt = self._complete(user, max_tokens)
+                txt, stop_reason = self._complete(user, max_tokens)
                 txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", txt.strip())
                 data = json.loads(txt)
                 cp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+                self.outcomes[tag] = OUTCOME_OK
                 return data
             except json.JSONDecodeError:
                 if attempt == self.max_retries - 1:
-                    (self.export_dir / f"{tag}.FAILED.txt").write_text(txt, encoding="utf-8")
+                    self._failed(tag, user, txt,
+                                 OUTCOME_TRUNCATED if stop_reason == "max_tokens"
+                                 else OUTCOME_UNPARSABLE)
                     return None
             except Exception as e:
+                last_error = e
                 wait = 2 ** attempt * 5
                 print(f"  [llm] {tag} [{self.provider}]: {type(e).__name__}, retry in {wait}s")
                 time.sleep(wait)
+        # every attempt raised: keep the API's own error type, not the word "error"
+        self.outcomes[tag] = OUTCOME_API_ERROR + api_error_type(last_error)
         return None
 
 
@@ -600,6 +683,10 @@ class DeutungProvider(Protocol):
 
     def resolve(self, items: list[tuple[str, str]]) -> dict[str, dict | None]:
         """Answer every ``(tag, prompt)`` pair; ``None`` where no answer is available."""
+
+    #: Optional: ``tag -> outcome`` (:data:`ANSWER_OUTCOMES`). A provider that does not
+    #: keep them is read as :data:`OUTCOME_NO_ANSWER` for every missing answer -- the
+    #: stage reports "no answer, reason unknown" rather than inventing one.
 
 
 class MissingFixtureError(KeyError):
@@ -628,6 +715,10 @@ class LiveProvider:
     @property
     def live(self) -> bool:
         return self.client.live
+
+    @property
+    def outcomes(self) -> dict[str, str]:
+        return self.client.outcomes
 
     def resolve(self, items: list[tuple[str, str]]) -> dict[str, dict | None]:
         if self.batch:
@@ -1178,6 +1269,69 @@ def _evidence_ok(ev: str, hay: str) -> bool:
     return probe[:15] in hay or ev in hay
 
 
+# ------------------------------------------------------------------ what the run lost
+# AP-18. Two production runs lost 18 of 326 chapters (4,7 % and 6,5 %), 13 of them
+# without a word: the answer was truncated, the JSON did not parse, the chapter fell back
+# to the extractive summary and the run still ended with "Done." and a file list. The
+# chapters hit were the ones with the most changes, which is to say the ones that matter.
+# The defect is the silence, so the stage now reports what it has -- always, not only on
+# failure: a report that appears only when something breaks says nothing when it is quiet.
+
+def _outcome_bucket(reason: str) -> str:
+    """``api_error:overloaded_error`` -> ``api_error``; everything else is its own bucket."""
+    return reason.split(":", 1)[0]
+
+
+def answer_summary(n_chapters: int, n_interpreted: int, lost: list[dict],
+                   prompt_dir: Path | str | None = None) -> list[str]:
+    """The console summary of the interpretation stage, one line per reason.
+
+    Args:
+        lost: ``{"mapping_id", "reason"}`` per chapter without an interpretation.
+        prompt_dir: where the prompts and raw answers were kept, named in the last line.
+    """
+    lines = [(f"  Deutung: {n_chapters} Kapitel, {n_interpreted} gedeutet, "
+              f"{len(lost)} ohne Deutung")]
+    buckets: dict[str, list[str]] = {}
+    for item in lost:
+        bucket = _outcome_bucket(item["reason"])
+        detail = item["reason"].split(":", 1)[1] if ":" in item["reason"] else ""
+        name = str(item.get("mapping_id") or item.get("section_id"))
+        buckets.setdefault(bucket, []).append(f"{name} ({detail})" if detail else name)
+    order = [b for b in ANSWER_OUTCOMES if b in buckets]
+    order += sorted(b for b in buckets if b not in ANSWER_OUTCOMES)
+    for bucket in order:
+        names = buckets[bucket]
+        shown = ", ".join(names[:SUMMARY_NAMES])
+        if len(names) > SUMMARY_NAMES:
+            shown += f", … (+{len(names) - SUMMARY_NAMES} weitere)"
+        lines.append(f"    {bucket:<14}{len(names):>4}   {shown}")
+    if lost and prompt_dir is not None:
+        lines.append(f"    -> Prompts und Rohantworten in {prompt_dir}/*.FAILED.txt")
+    return lines
+
+
+def answer_feedback(n_chapters: int, n_interpreted: int, lost: list[dict]) -> list[dict]:
+    """The same numbers machine-readable, as ``pipeline_feedback`` entries of phase
+    ``deutung`` -- one per lost chapter plus one total, so a later run can compare."""
+    entries = [{"section_id": item.get("section_id"), "mapping_id": item.get("mapping_id"),
+                "phase": "deutung", "field": "answer", "reason": item["reason"], "count": 1,
+                "finding": (f"no interpretation for this chapter ({item['reason']}); "
+                            "the extractive summary was used instead")}
+               for item in lost]
+    reasons = Counter(_outcome_bucket(item["reason"]) for item in lost)
+    entries.append({
+        "section_id": None, "phase": "deutung", "field": "answers",
+        "n_chapters": n_chapters, "n_interpreted": n_interpreted, "count": len(lost),
+        "reasons": dict(sorted(reasons.items())),
+        "finding": (f"{n_interpreted} of {n_chapters} chapters were interpreted; "
+                    f"{len(lost)} without an interpretation"
+                    + (f" ({', '.join(f'{k}: {v}' for k, v in sorted(reasons.items()))})"
+                       if lost else "")),
+    })
+    return entries
+
+
 def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir: Path,
                 model: str, scope: str = "core", provider: str = "anthropic",
                 base_url: str | None = None, key_env: str | None = None,
@@ -1233,6 +1387,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     results = []
     review = []
     dropped: list[dict] = []       # pipeline-owned values the model supplied anyway
+    lost: list[dict] = []          # chapters without an interpretation, with the reason
+    outcomes = getattr(answer_source, "outcomes", None) or {}
     n_llm = 0
     for ch, cid, mid, tag, prompt, sel, old_x, new_x in jobs:
         data = answers.get(tag)
@@ -1241,7 +1397,10 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         invalid = Counter()        # (axis field, violation) -> how often in this chapter
         offenders: dict = {}       # (axis field, violation) -> the discarded values
         if data is None:
-            # fallback: extractive
+            # fallback: extractive -- and the reason it came to that is kept, so the run
+            # can say which chapters it lost and why (AP-18)
+            lost.append({"section_id": cid, "mapping_id": mid,
+                         "reason": outcomes.get(tag, OUTCOME_NO_ANSWER)})
             data = {"section_id": cid,
                     "summary_old": extractive_summary(old_x),
                     "summary_new": extractive_summary(new_x),
@@ -1328,6 +1487,10 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     # field it does not own (AP-07). Five invented chapter ids made 165 interpretations
     # uncheckable in the 4110 run, and nothing in the output said so.
     feedback += dropped
+    # ... and what the run itself lost: which chapters have no interpretation, and why
+    feedback += answer_feedback(len(results), n_llm, lost)
+    for line in answer_summary(len(results), n_llm, lost, out_dir / "llm_prompts"):
+        print(line)
     live = answer_source.live
     out = {"model": model if live else None, "mode": "api" if live else "export",
            "language": language,
@@ -1344,6 +1507,7 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         L.append("**Verteilung:** " + ", ".join(f"{p}: {n}" for p, n in by_phase.most_common()) + "\n")
         for fb in feedback:
             idx = f" (Änderungen {fb['change_indices']})" if fb.get("change_indices") else ""
-            L.append(f"- **{fb['section_id']}** [{fb['phase']}]{idx}: {fb['finding']}")
+            where = fb.get("section_id") or "(ganzer Lauf)"
+            L.append(f"- **{where}** [{fb['phase']}]{idx}: {fb['finding']}")
         (out_dir / "pipeline_feedback.md").write_text("\n".join(L), encoding="utf-8")
     return out
