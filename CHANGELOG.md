@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- A reason for every chapter that has no interpretation, and a summary at the end of the
+  stage that is printed whether anything failed or not. Two production runs lost 8 of 171
+  and 10 of 155 chapters — the ones with the most changes, which is to say the ones that
+  matter — and said so for 5 of them; the rest fell back to the extractive summary in
+  silence and the run still ended with a list of files. The defect was not the token
+  limit but the silence.
+  - Four outcomes per chapter: `ok`, `truncated`, `api_error:<type>` and `unparsable`
+    (plus `export` for a run without a key and `no_answer` for a provider that keeps no
+    outcomes). Truncation is read from the answer's `stop_reason`, not guessed from its
+    length, and an `api_error` carries the type the API itself reported —
+    `overloaded_error` is worth a repeat run, `invalid_request_error` is not, and "error"
+    cannot tell them apart. Both paths are covered, the message batch and the sequential
+    one.
+  - `Deutung: 171 Kapitel, 163 gedeutet, 8 ohne Deutung` on the console, one line per
+    reason with the chapters named, and a pointer to the prompts and raw answers. The
+    same numbers go into `pipeline_feedback` under the phase `deutung` — one entry per
+    lost chapter plus a total — so a later run can compare them.
+  - A `.FAILED.txt` now keeps the outcome, the system prompt, the user prompt **and** the
+    raw answer. Until now it held the answer alone.
+
 - Two new deliverables that put the four axes in front of a reader, and a marker in the
   two existing ones. Until now the axes existed only in `deutung.json`: the 238
   interpretations that touch a `proof_obligation` in the 4110 run were there and visible
@@ -114,6 +134,17 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The per-answer token budget is the named constant `MAX_ANSWER_TOKENS`, raised from
+  16000 to **48000**. At 16000 the answer to chapter 10.2.2 of the 4110 run stopped
+  inside a JSON string after 35 113 characters — 2.19 characters per token — with all 40
+  interpretations delivered (a chapter prompt asks for at most 40 changes) and the figure
+  block cut off. 48000 is about 2.8 times what the largest observed answer needed.
+  Raising the limit costs nothing on a repeat run: the answer cache is keyed on model,
+  system prompt and user prompt and **not** on `max_tokens`, which is now shown on both
+  finished runs rather than assumed — every one of the 163 and 145 cached answers is hit
+  again by the rebuilt prompts, and exactly the 8 and 10 lost chapters would be asked
+  anew. Note that a model whose output limit is below 48000 will now reject the request;
+  the run says so per chapter instead of failing quietly.
 - Axis D has fifteen values instead of ten: `formula`, `note`, `heading`, `caption` and
   `example` join the vocabulary in front of `none`, the ten older ones keep their order.
   They are the five largest clusters of the free `other:` labels of the first two axis

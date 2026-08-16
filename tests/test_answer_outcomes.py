@@ -191,16 +191,17 @@ def test_the_sequential_path_reports_truncation_too(client, monkeypatch, tmp_pat
 
 def test_the_summary_lists_every_lost_chapter(tmp_path, capsys):
     """Three failures, three reasons, all three chapters named on the console."""
-    _run(tmp_path,
-         answers={"2": dict(ANSWER, section_id="2")},
-         outcomes={"1": "truncated", "2": "ok", "3": "api_error:overloaded_error"})
+    _run(tmp_path, answers={},
+         outcomes={"1": "truncated", "2": "api_error:overloaded_error", "3": "unparsable"})
     printed = capsys.readouterr().out
 
-    assert "Deutung: 3 Kapitel, 1 gedeutet, 2 ohne Deutung" in printed
-    assert "truncated" in printed and "api_error" in printed
-    assert "overloaded_error" in printed
-    lines = [ln for ln in printed.splitlines() if "truncated" in ln or "api_error" in ln]
-    assert any("1" in ln for ln in lines) and any("3" in ln for ln in lines)
+    assert "Deutung: 3 Kapitel, 0 gedeutet, 3 ohne Deutung" in printed
+    named = {reason: [ln for ln in printed.splitlines() if ln.strip().startswith(reason)]
+             for reason in ("truncated", "api_error", "unparsable")}
+    assert all(len(lines) == 1 for lines in named.values())
+    assert named["truncated"][0].endswith("1")
+    assert named["api_error"][0].endswith("2 (overloaded_error)")   # the API's own type
+    assert named["unparsable"][0].endswith("3")
     assert "llm_prompts" in printed          # where the evidence is
 
 
