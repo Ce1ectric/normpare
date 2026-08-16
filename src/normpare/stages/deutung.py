@@ -57,6 +57,20 @@ MAX_ANSWER_TOKENS = 48000
 #: the 4110 run, 552 of 2065 in 4120, in the professionally most important chapters.
 MAX_CHANGES_PER_REQUEST = 40
 
+#: Character budget for the cell text of **one** table in the prompt. Until AP-20 this was
+#: 1100 and cut without a word: 115 of 233 tables in the 4110 run, 89 of 171 in 4120 --
+#: half of the tables, and tables are where the limit values live. Measured over both
+#: corpora the largest rendered table is 6752 characters (4110) and 6645 (4120), so 8000
+#: covers every single one of them and no splitting into row blocks is needed. A table
+#: that still exceeds it says so, see :func:`_render_cells`.
+TABLE_CHARS = 8000
+
+#: Character budget for the whole table and figure block of one chapter. 6500 before, and
+#: with tables arriving complete it would bite at once (18 of 48 blocks in 4110, 13 of 42
+#: in 4120). Largest measured block under :data:`TABLE_CHARS`: 26 445 (4110) and 29 694
+#: (4120) -- 32000 covers both, and the cut is named when it happens.
+ASSET_BLOCK_CHARS = 32000
+
 #: Why a chapter has an interpretation, or has none. ``api_error`` never stands alone: it
 #: carries the API's own error type (``api_error:overloaded_error``), because "error" says
 #: nothing about whether a repeat run would help.
@@ -791,9 +805,18 @@ class FixtureProvider:
 
 
 # ------------------------------------------------------------------ prompt building
-def _clip(t: str | None, n: int) -> str:
+def _clip(t: str | None, n: int, mark: bool = False) -> str:
+    """``t`` shortened to ``n`` characters, with an ellipsis where it was cut.
+
+    ``mark=True`` also says *how much* is missing -- ``… (gekürzt, +2057 Zeichen)``, the
+    shape the row cap of :func:`_render_cells` has always used. Only the caps of AP-20
+    use it; the other callers (change text, chapter excerpt) keep the bare ellipsis until
+    their own package raises them.
+    """
     t = (t or "").strip()
-    return t if len(t) <= n else t[:n] + " …"
+    if len(t) <= n:
+        return t
+    return t[:n] + (f" … (gekürzt, +{len(t) - n} Zeichen)" if mark else " …")
 
 
 def _change_block(i: int, c: dict) -> str:
@@ -841,13 +864,23 @@ def _tabmap(secs: dict) -> dict:
     return m
 
 
-def _render_cells(t: dict, max_rows: int = 40, max_chars: int = 1100) -> str:
+def _render_cells(t: dict, max_rows: int = 40, max_chars: int = TABLE_CHARS,
+                  notes: list | None = None) -> str:
+    """The cell text of one table for the prompt, capped at ``max_chars``.
+
+    ``notes`` collects one record per rendered table -- clipped or not, so the report can
+    say "0 of 233" and mean a measured zero (AP-20).
+    """
     rows = t.get("cells") or []
     buf = [" | ".join((c or "").strip() for c in r) for r in rows[:max_rows]]
     body = " ‖ ".join(buf)
     if len(rows) > max_rows:
         body += f" … (+{len(rows) - max_rows} Zeilen)"
-    return _clip(body, max_chars)
+    body = body.strip()
+    if notes is not None:
+        notes.append({"kind": "table", "table_id": t.get("id"), "n_chars": len(body),
+                      "n_dropped": max(len(body) - max_chars, 0)})
+    return _clip(body, max_chars, mark=True)
 
 
 def _figs(secs: dict, ids) -> list[dict]:
@@ -869,9 +902,15 @@ def _paras(secs: dict, ids) -> list[str]:
     return out
 
 
-def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict, max_chars: int = 6500) -> str:
+def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict,
+                         max_chars: int = ASSET_BLOCK_CHARS,
+                         notes: list | None = None) -> str:
     """Text extract of the chapter tables (with cell contents) and figure captions,
-    paired via ch['tables_diff']. Empty string if the chapter has no assets."""
+    paired via ch['tables_diff']. Empty string if the chapter has no assets.
+
+    ``notes`` collects a record per rendered table and one for the block itself; see
+    :func:`truncation_report` for what is made of them.
+    """
     om, nm = _tabmap(o_secs), _tabmap(n_secs)
     tlines = []
     for td in ch.get("tables_diff") or []:
@@ -883,19 +922,19 @@ def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict, max_chars: int = 
             ot, nt = om.get(td.get("old")), nm.get(td.get("new"))
             tlines.append(f"  [GEÄNDERT] {cap}  (geänderte Zeilen: {td.get('rows_changed', '?')})")
             if ot:
-                tlines.append("    ALT: " + _render_cells(ot))
+                tlines.append("    ALT: " + _render_cells(ot, notes=notes))
             if nt:
-                tlines.append("    NEU: " + _render_cells(nt))
+                tlines.append("    NEU: " + _render_cells(nt, notes=notes))
         elif kind == "new":
             nt = nm.get(td.get("new"))
             tlines.append(f"  [NEU] {cap}")
             if nt:
-                tlines.append("    NEU: " + _render_cells(nt))
+                tlines.append("    NEU: " + _render_cells(nt, notes=notes))
         elif kind == "removed":
             ot = om.get(td.get("old"))
             tlines.append(f"  [ENTFALLEN] {cap}")
             if ot:
-                tlines.append("    ALT: " + _render_cells(ot))
+                tlines.append("    ALT: " + _render_cells(ot, notes=notes))
     fo, fn = _figs(o_secs, ch.get("old_ids")), _figs(n_secs, ch.get("new_ids"))
     flines = []
     if fo:
@@ -911,7 +950,11 @@ def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict, max_chars: int = 
     if flines:
         block += [" BILDER:"] + flines
     s = "\n".join(block)
-    return s if len(s) <= max_chars else s[:max_chars] + "\n  … (gekürzt)"
+    dropped = max(len(s) - max_chars, 0)
+    if notes is not None:
+        notes.append({"kind": "asset_block", "table_id": None, "n_chars": len(s),
+                      "n_dropped": dropped})
+    return s if not dropped else s[:max_chars] + f"\n  … (Block gekürzt, +{dropped} Zeichen)"
 
 
 def asset_haystack(ch: dict, o_secs: dict, n_secs: dict) -> str:
@@ -1016,7 +1059,8 @@ def changes_by_priority(ch: dict) -> list[int]:
 
 def render_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str, sel: list[int],
                           o_secs: dict | None = None, n_secs: dict | None = None,
-                          part: int = 1, n_parts: int = 1) -> str:
+                          part: int = 1, n_parts: int = 1,
+                          notes: list | None = None) -> str:
     """One request about the changes ``sel`` of this chapter.
 
     ``part``/``n_parts`` name the block in the counter line for a split chapter. Part 1
@@ -1037,7 +1081,7 @@ def render_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str, sel: lis
         head.append(_change_block(i, ch["changes"][i]))
     # tables and figures travel with block 1 only: asked in every block they would be
     # interpreted n times, and the merge would have to undo that for no gain
-    assets = (chapter_assets_block(ch, o_secs, n_secs)
+    assets = (chapter_assets_block(ch, o_secs, n_secs, notes=notes)
               if (o_secs is not None and n_secs is not None and part == 1) else "")
     if assets:
         head.append(assets)
@@ -1056,8 +1100,8 @@ def render_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str, sel: lis
 
 def build_chapter_prompts(ch: dict, old_excerpt: str, new_excerpt: str,
                           o_secs: dict | None = None, n_secs: dict | None = None,
-                          max_changes: int = MAX_CHANGES_PER_REQUEST
-                          ) -> list[tuple[str, list[int]]]:
+                          max_changes: int = MAX_CHANGES_PER_REQUEST,
+                          notes: list | None = None) -> list[tuple[str, list[int]]]:
     """Every request this chapter needs: ``(prompt, included change indices)`` per block.
 
     The changes are ordered by priority and then cut into blocks of ``max_changes``, so
@@ -1069,7 +1113,7 @@ def build_chapter_prompts(ch: dict, old_excerpt: str, new_excerpt: str,
     blocks = [sorted(order[i:i + max_changes]) for i in range(0, len(order), max_changes)]
     blocks = blocks or [[]]              # a chapter without changes still asks once
     return [(render_chapter_prompt(ch, old_excerpt, new_excerpt, sel, o_secs, n_secs,
-                                   part=n + 1, n_parts=len(blocks)), sel)
+                                   part=n + 1, n_parts=len(blocks), notes=notes), sel)
             for n, sel in enumerate(blocks)]
 
 
@@ -1398,14 +1442,37 @@ def _outcome_bucket(reason: str) -> str:
     return reason.split(":", 1)[0]
 
 
+def truncation_report(notes: list[dict]) -> dict:
+    """What the two character budgets of the prompt cut, out of how much (AP-20).
+
+    ``notes`` is what :func:`build_chapter_prompts` collected: one record per rendered
+    table and one per asset block, clipped or not. Both totals are reported even when
+    nothing was clipped -- a number that only appears when it is bad leaves the good case
+    unmeasured, which is exactly how the old 1100-character cap stayed invisible.
+    """
+    tables = [n for n in notes if n["kind"] == "table"]
+    blocks = [n for n in notes if n["kind"] == "asset_block"]
+    return {
+        "n_tables": len(tables),
+        "n_tables_truncated": sum(1 for n in tables if n["n_dropped"]),
+        "n_asset_blocks": len(blocks),
+        "n_asset_blocks_truncated": sum(1 for n in blocks if n["n_dropped"]),
+        "truncated": [n for n in notes if n["n_dropped"]],
+    }
+
+
 def coverage_report(results: list[dict], n_split_chapters: int, n_extra_requests: int,
-                    n_collisions: int, n_repaired: int) -> dict:
+                    n_collisions: int, n_repaired: int,
+                    asset_notes: list[dict] | None = None) -> dict:
     """How much of the compared material actually carries an interpretation.
 
     A chapter counts what it was *asked* about: before AP-19 that was at most 40 changes
     per chapter whatever its size, which left 28.5 % of the 4110 run uninterpreted with
     nothing saying so. ``incomplete`` names every chapter that still has changes without
     an interpretation, with both numbers.
+
+    ``asset_notes`` adds the second kind of loss: material that reached the prompt only
+    in part because a table or an asset block ran into its character budget (AP-20).
     """
     total = sum(r.get("_changes_total", 0) for r in results)
     done = sum(len(r.get("_changes_interpreted") or []) for r in results)
@@ -1413,6 +1480,7 @@ def coverage_report(results: list[dict], n_split_chapters: int, n_extra_requests
         "n_changes": total, "n_interpreted": done,
         "n_split_chapters": n_split_chapters, "n_extra_requests": n_extra_requests,
         "n_collisions": n_collisions, "n_repaired": n_repaired,
+        **truncation_report(asset_notes or []),
         "incomplete": [{"section_id": r.get("section_id"), "mapping_id": r.get("mapping_id"),
                         "n_changes": r.get("_changes_total", 0),
                         "n_interpreted": len(r.get("_changes_interpreted") or [])}
@@ -1440,6 +1508,11 @@ def coverage_lines(coverage: dict) -> list[str]:
     if coverage["n_split_chapters"]:
         lines.append(f"    Kapitel in Teilanfragen: {coverage['n_split_chapters']} "
                      f"({coverage['n_extra_requests']} Zusatzanfragen)")
+    # ... always, also at zero: this is the line the old silent table cap never wrote
+    lines.append(f"    Tabellen gekürzt: {coverage.get('n_tables_truncated', 0)} von "
+                 f"{coverage.get('n_tables', 0)}")
+    lines.append(f"    Asset-Blöcke gekürzt: {coverage.get('n_asset_blocks_truncated', 0)} "
+                 f"von {coverage.get('n_asset_blocks', 0)}")
     if coverage["n_repaired"]:
         lines.append(f"    repariert: {coverage['n_repaired']}")
     if coverage["n_collisions"]:
@@ -1466,7 +1539,11 @@ def coverage_feedback(coverage: dict) -> dict:
                         f"{coverage['n_split_chapters']} chapter(s) were split into "
                         f"{coverage['n_extra_requests']} extra request(s), "
                         f"{coverage['n_collisions']} change index collision(s), "
-                        f"{coverage['n_repaired']} answer(s) only readable leniently")}
+                        f"{coverage['n_repaired']} answer(s) only readable leniently; "
+                        f"{coverage.get('n_tables_truncated', 0)} of "
+                        f"{coverage.get('n_tables', 0)} table(s) truncated, "
+                        f"{coverage.get('n_asset_blocks_truncated', 0)} of "
+                        f"{coverage.get('n_asset_blocks', 0)} asset block(s)")}
 
 
 def answer_summary(n_chapters: int, n_interpreted: int, lost: list[dict],
@@ -1560,13 +1637,15 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     # A chapter with more changes than fit into one request is split into several
     # (AP-19); block 1 is the prompt an unsplit chapter would get, down to the byte.
     jobs = []          # (ch, cid, mid, tags, parts, old_x, new_x)
+    asset_notes: list[dict] = []       # what the table/block budgets cut, per chapter
     for ch in synopse["chapters"]:
         substantive = [c for c in ch["changes"] if not c.get("semantic_equal")]
         if scope == "core" and not substantive and not ch.get("part_changed"):
             continue
         old_x = sec_excerpt(o_secs, ch.get("old_ids") or [])
         new_x = sec_excerpt(n_secs, ch.get("new_ids") or [])
-        parts = build_chapter_prompts(ch, old_x, new_x, o_secs, n_secs)
+        notes: list[dict] = []
+        parts = build_chapter_prompts(ch, old_x, new_x, o_secs, n_secs, notes=notes)
         cid = ch.get("new_id") or ch.get("old_id")
         # the tag routes the answer back to its chapter and names the exported prompt
         # file, so it has to be unique: it is built from the mapping id (ENT-24), and a
@@ -1574,6 +1653,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         mid = ch.get("mapping_id") or str(cid)
         tag = re.sub(r"[^\w.]", "_", mid)
         tags = [tag if n == 0 else f"{tag}.T{n + 1}" for n in range(len(parts))]
+        # the chapter a clipped table belongs to is known here, not down in the renderer
+        asset_notes += [{"section_id": cid, "mapping_id": mid, **note} for note in notes]
         jobs.append((ch, cid, mid, tags, parts, old_x, new_x))
 
     # ---- phase 2: resolve the answers --------------------------------------------
@@ -1700,7 +1781,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     # ... and what the run itself lost: which chapters have no interpretation, and why
     feedback += answer_feedback(len(results), n_llm, lost)
     # ... and how much of the material carries an interpretation at all (AP-19)
-    coverage = coverage_report(results, n_split, n_extra, n_collisions, n_repaired)
+    coverage = coverage_report(results, n_split, n_extra, n_collisions, n_repaired,
+                               asset_notes)
     feedback.append(coverage_feedback(coverage))
     for line in answer_summary(len(results), n_llm, lost, out_dir / "llm_prompts",
                                coverage=coverage):
