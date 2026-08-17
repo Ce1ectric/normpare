@@ -49,6 +49,8 @@ notizen/
 prompts/
 runs/
 nachtlauf.sh
+# Arbeitskopie der Deutungsläufe: Laufkopie, ausgeleitete Prompts, Antworten
+arbeit/
 
 # Urheberrechtlich geschützte Korpus-Fixtures
 tests/fixtures/korpus/
