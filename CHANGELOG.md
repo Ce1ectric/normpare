@@ -207,6 +207,34 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **Tables are paired by what they say, not by the number in front of it.** The pairing
+  was greedy over the new tables in document order, compared the *whole* caption
+  including its number, and looked at the cells only when a caption was missing. In
+  4110/10.3.4 that paired the old table 11 with the new table 16, reported the new table
+  17 as an addition and the old table 10 as a deletion — a set of value changes that does
+  not exist, while the one real change of the chapter appeared in no reported row. Three
+  things changed together:
+  - `caption_text()` accepts a string as a caption only when it looks like one (keyword,
+    number, separator, at least three characters of text) and returns the descriptive
+    rest **without** the number. `"Tabelle 10 empfohlen."` is the end of the preceding
+    sentence, so it now counts as a missing caption; the raw string stays in the record,
+    because the display still uses it. Measured over both corpora: 4 of 16 and 3 of 14
+    caption fields on the PDF-read old side fail the check, none at all on the DOCX side.
+  - `table_similarity()` takes `max(caption, content)` instead of falling back to a
+    content comparison penalized by 0.9. The content window grew from 3 to 10 rows
+    (`CONTENT_ROWS`), still capped at 400 characters after normalization.
+  - `_assign_tables()` builds the similarity matrix over all old × new tables of a
+    chapter and assigns them optimally (`linear_sum_assignment`, the same wrapper the
+    paragraph aligner has used all along); the threshold `TABLE_MATCH_MIN = 0.55` applies
+    **after** the assignment, so a weak pair falls apart into `removed` + `new`.
+
+  Effect on the two production corpora: 4110 goes from 19 to 17 pairs, 4120 from 15 to
+  13, and the rows reported as changed drop from 236 to 152 and from 200 to 148 — those
+  were the invented ones. 60909 is unchanged. `10.3.4` now reports `11 ↔ 17` and
+  `10 ↔ 16`, `10.3.5` likewise. Nothing outside `tables_diff` moves: with every
+  `tables_diff` key removed, `chapters.json` and `synopse.json` are byte-identical before
+  and after on all three corpora. Tables that changed chapters between editions are still
+  out of reach — the diff compares within one chapter mapping.
 - The per-answer token budget is the named constant `MAX_ANSWER_TOKENS`, raised from
   16000 to **48000**. At 16000 the answer to chapter 10.2.2 of the 4110 run stopped
   inside a JSON string after 35 113 characters — 2.19 characters per token — with all 40
