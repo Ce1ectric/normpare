@@ -151,6 +151,45 @@ def display_ops(ops: list) -> tuple[list, bool]:
     return merged, substantive
 
 
+#: Words that carry the degree of obligation of a sentence. Deliberately short and closed:
+#: every entry turns a duty into a reservation or a reservation into a duty when it appears
+#: or disappears ("ggf. unter Beruecksichtigung" -> "unter Beruecksichtigung"). Words that
+#: merely colour a statement are not in here.
+QUALIFIER_WORDS = ("ggf.", "gegebenenfalls", "in der Regel", "grundsätzlich", "mindestens",
+                   "höchstens", "nur", "soweit", "sofern", "möglichst")
+_QUALIFIER_RE = re.compile(
+    r"(?<!\w)(?:" + "|".join(re.escape(w) for w in QUALIFIER_WORDS) + r")(?!\w)",
+    re.IGNORECASE)
+
+
+def qualifiers(text: str) -> set[str]:
+    """The qualifier words a text uses, lowercased (:data:`QUALIFIER_WORDS`)."""
+    return {m.group(0).lower() for m in _QUALIFIER_RE.finditer(text or "")}
+
+
+def cosmetic_lifted_by(old_t: str, new_t: str, kennwerte: dict, refs_diff: dict) -> str | None:
+    """The signal that forbids calling this change cosmetic, or ``None``.
+
+    A change whose visible operations are all filtered away lands in the ``cosmetic``
+    branch -- correct for hyphenation and typography, wrong for "mindestens 5 %" ->
+    "mindestens 1 %", whose single deleted digit is not substantive on its own. Three
+    signals veto the verdict; the change falls back to ``similar`` and is not marked
+    semantically equal.
+
+    Counting digits would *not* do: "some digit differs" hits 53 of 75 cosmetic changes at
+    4110 and 55 of 82 at 4120 -- standard numbers, years, cross-references. The value diff
+    is the right signal because it reads number *and* unit.
+    """
+    if kennwerte.get("changed"):
+        return "kennwerte"
+    if qualifiers(old_t) != qualifiers(new_t):
+        return "qualifier"
+    if any(refs_diff.get(k) for k in
+           ("internal_added", "internal_removed", "external_added", "external_removed")):
+        return "refs"
+    return None
+
+
 def _mod_max(paras: list[dict]) -> str:
     best = "informativ"
     for p in paras:
@@ -388,16 +427,19 @@ def _para_change(kind: str, olds: list[dict], news: list[dict], conf: float,
         rec["syntactic"] = syntactic_diff(n1(old_t), n1(new_t))
         dops, substantive = display_ops(rec["syntactic"]["ops"])
         rec["display_ops"] = dops
-        if compare_key(old_t) == compare_key(new_t) or not substantive:
+        # measured before the verdict, written in the unchanged order below
+        kennwerte, refs_diff = values.diff_values(old_t, new_t), _refs_diff(olds, news)
+        if (compare_key(old_t) == compare_key(new_t) or not substantive) and not \
+                cosmetic_lifted_by(old_t, new_t, kennwerte, refs_diff):
             if kind in ("similar", "identical"):
                 rec["kind"] = "cosmetic"
             rec["semantic_equal"] = True
         else:
             rec["semantic_equal"] = False
-        rec["kennwerte"] = values.diff_values(old_t, new_t)
+        rec["kennwerte"] = kennwerte
         om, nm = _mod_max(olds), _mod_max(news)
         rec["modality"] = {"old": om, "new": nm, "shift": modality.shift(om, nm)}
-        rec["refs"] = _refs_diff(olds, news)
+        rec["refs"] = refs_diff
     elif news:
         rec["modality"] = {"new": _mod_max(news)}
         rec["kennwerte"] = {"added": values.extract_values(new_t), "changed": [], "removed": []}

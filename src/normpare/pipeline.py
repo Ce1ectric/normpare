@@ -108,8 +108,15 @@ class Pipeline:
         new = _load(self.out / "neu" / "norm_doc.json", "ingest")
         mapping = _load(self.out / "mapping.json", "map")
         backend = load_backend(self.cfg.similarity)
+        align_stats: dict = {}
         mapping["moved"] = align_document(old, new, mapping["records"], backend,
-                                          tau=self.cfg.tau, tau_moved=self.cfg.tau_moved)
+                                          tau=self.cfg.tau, tau_moved=self.cfg.tau_moved,
+                                          stats=align_stats)
+        # AP-24: halves of split paragraphs taken into the existing pairing, and candidates
+        # left lying because their old paragraph had already taken one (console only)
+        print(f"  [align] Geteilte Absätze zusammengeführt: "
+              f"{align_stats.get('split_absorbed', 0)}"
+              f" (liegen geblieben: {align_stats.get('split_skipped', 0)})")
         if self.cfg.embed_fallback:
             from .stages.align.paras import embed_rescue_pass
             from .text.similarity import load_embed_backend

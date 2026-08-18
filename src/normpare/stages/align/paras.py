@@ -9,6 +9,8 @@ Per chapter pair:
      merge: 2-3 old <-> one new
   3b absorbed: a leftover old paragraph whose text is contained in an already paired
      new paragraph joins that link (n:1, kind "merged") -- containment, no threshold
+  3c split: a leftover new paragraph whose text is contained in an already paired old
+     paragraph joins that link (1:2, kind "split") -- the other half of a split paragraph
 Document-wide:
   4  moved: remaining new x removed globally against each other (threshold tau_moved) ->
      instead of "new"+"removed", a moved link with source/target chapter.
@@ -38,6 +40,14 @@ _ABSORBING_KINDS = {"identical", "similar", "merged"}
 #: shorter span ("Allgemeines") is contained in many paragraphs by chance.
 MIN_ABSORB_KEY = 20
 
+#: Link kinds a leftover *new* paragraph may join (pass 3c). Exactly one old and one new
+#: paragraph, so the pairing widens to 1:2 -- the shape of a split.
+_SPLIT_HOST_KINDS = {"identical", "similar"}
+#: Minimum compare_key length for a split half. Higher than MIN_ABSORB_KEY: the claim here
+#: is that a whole new paragraph is a piece of an old one, and half a sentence is contained
+#: in some paragraph of the chapter by chance.
+MIN_SPLIT_KEY = 40
+
 
 def _paras(sec) -> list[dict]:
     return [p for p in sec["paragraphs"] if p.get("n1", p.get("n0", "")).strip()
@@ -48,7 +58,7 @@ def _txt(p) -> str:
     return p.get("n1") or p.get("n0") or ""
 
 
-def align_chapter(old_paras, new_paras, sim_backend, tau: float):
+def align_chapter(old_paras, new_paras, sim_backend, tau: float, stats: dict | None = None):
     links = []
     used_o, used_n = set(), set()
 
@@ -171,6 +181,42 @@ def align_chapter(old_paras, new_paras, sim_backend, tau: float):
             link["kind"] = "merged"
             used_o.add(i)
 
+    # ---- 3c) split: a new paragraph that is a piece of an already paired old one ----
+    # The new edition splits an old paragraph in two. Pass 2 pairs the first half and the
+    # second one falls through to "new" although it stands verbatim in the old text -- the
+    # same sentence counted once as a deletion and once as an addition. Pass 3 cannot see
+    # it: its window needs two *free* neighbouring new paragraphs, but the Hungarian
+    # assignment has already taken the old paragraph. Recognised by containment of the
+    # compare_key, never by lowering a threshold, and strictly additive: an existing
+    # pairing widens to 1:2, none is broken up.
+    hosts = {l["o"][0]: l for l in links
+             if len(l["o"]) == 1 and len(l["n"]) == 1 and l["kind"] in _SPLIT_HOST_KINDS}
+    if hosts:
+        host_keys = {i: compare_key(_txt(old_paras[i])) for i in hosts}
+        taken = set()
+        for j in range(len(new_paras)):
+            if j in used_n:
+                continue
+            key = compare_key(_txt(new_paras[j]))
+            if len(key) < MIN_SPLIT_KEY:
+                continue               # too short: a piece of any paragraph by chance
+            # Every eligible old paragraph shares the whole fragment, so the shared part
+            # cannot rank them -- the smaller paragraph id decides.
+            host = next((i for i in sorted(hosts) if key in host_keys[i]), None)
+            if host is None:
+                continue
+            if host in taken:          # one old paragraph absorbs at most one extra half
+                if stats is not None:
+                    stats["split_skipped"] = stats.get("split_skipped", 0) + 1
+                continue
+            link = hosts[host]
+            link["n"] = sorted(link["n"] + [j])
+            link["kind"] = "split"
+            used_n.add(j)
+            taken.add(host)
+            if stats is not None:
+                stats["split_absorbed"] = stats.get("split_absorbed", 0) + 1
+
     # ---- remainder --------------------------------------------------------------
     for j in range(len(new_paras)):
         if j not in used_n:
@@ -191,7 +237,8 @@ def align_chapter(old_paras, new_paras, sim_backend, tau: float):
 
 
 def align_document(old_doc, new_doc, mapping_records, sim_backend,
-                   tau: float = 0.62, tau_moved: float = 0.72) -> list[dict]:
+                   tau: float = 0.62, tau_moved: float = 0.72,
+                   stats: dict | None = None) -> list[dict]:
     o_secs = {s["id"]: s for s in old_doc["sections"]}
     n_secs = {s["id"]: s for s in new_doc["sections"]}
     pdf_involved = (old_doc["source"]["format"] == "pdf") != (new_doc["source"]["format"] == "pdf")
@@ -213,7 +260,7 @@ def align_document(old_doc, new_doc, mapping_records, sim_backend,
             for p in _paras(n_secs.get(sid, {"paragraphs": []})):
                 news.append(p)
                 n_index.append(p["id"])
-        links = align_chapter(olds, news, sim_backend, tau_eff)
+        links = align_chapter(olds, news, sim_backend, tau_eff, stats=stats)
         rec["para_links"] = [{"old_ids": [o_index[i] for i in l["o"]],
                               "new_ids": [n_index[j] for j in l["n"]],
                               "kind": l["kind"], "confidence": l["conf"]} for l in links]
