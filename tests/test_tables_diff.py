@@ -105,7 +105,7 @@ CERT_NEW = dict(CERT_OLD, id="n_cert")
 CERT_NEW_CHANGED = dict(CERT_OLD, id="n_cert_chg",
                         cells=CERT_CELLS[:3] + [["Konformitaetsnachweis", "Messbericht",
                                                  "Anlage 5"]])
-#: A weaker competitor: the header itself differs in one cell (measured 0.925).
+#: A weaker competitor: the header itself differs in one cell (measured 0.939).
 CERT_NEW_WEAKER = dict(CERT_OLD, id="n_cert_wk",
                        cells=[CERT_CELLS[0], ["Pruefgegenstand", "Nachweis", "Anhang"]]
                        + CERT_CELLS[2:])

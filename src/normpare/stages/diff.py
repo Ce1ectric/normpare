@@ -212,13 +212,24 @@ _CAPTION_RE = re.compile(
     r"([0-9]+(?:\.[0-9]+)*|[A-Za-z](?:\.[0-9]+)*)\s*[–—:-]\s*(\S.*)", re.I)
 #: Below this many characters the descriptive rest is not a description.
 MIN_CAPTION_TEXT = 3
-#: Rows and characters of the cell text that enter the content comparison (AP-22: three
-#: rows were often just the header of both tables).
-CONTENT_ROWS = 10
+#: Rows and characters of the cell text that enter the content comparison. AP-22 widened
+#: the window to ten rows; AP-23 measured what that costs and takes it back. The head of a
+#: table carries its identity, the body does not: in a form the first rows are the header
+#: both editions share and everything below is filled in, so the wider the window, the more
+#: it compares entries instead of tables (4110 B.11.2 0.850 -> 0.407, E.13 0.954 -> 0.287).
+#: Measured over all three corpora, the narrow window loses none of the AP-22 repairs --
+#: 10.3.4 and 10.3.5 pair the same way at both widths, because that repair came from
+#: comparing the caption *without its number* -- and it wins back six pairings at 4110, six
+#: at 4120 and one at 60909 (runs/AP-23_2026-08-18/fenster_*.txt).
+CONTENT_ROWS = 3
 CONTENT_CHARS = 400
 #: From this score on an assigned pair counts as the same table. Applied *after* the
 #: assignment: a pair below it falls apart into "removed" + "new".
 TABLE_MATCH_MIN = 0.55
+#: The same for a pair found across chapter boundaries. Higher than TABLE_MATCH_MIN,
+#: because a move is the stronger claim: inside a chapter the two tables are already known
+#: to belong to the same subject, across the whole document they are not.
+CROSS_CHAPTER_MIN = 0.80
 
 
 def caption_text(caption: str | None) -> str | None:
@@ -280,6 +291,66 @@ def _assign_tables(ot: list[dict], nt: list[dict]) -> dict[int, tuple[int, float
             if sim[i][j] >= TABLE_MATCH_MIN}
 
 
+def _rows_changed(t_old: dict, t_new: dict) -> int:
+    """Rows the new edition added, dropped or rewrote -- the row diff of two paired tables."""
+    oc = ["\t".join(r) for r in t_old.get("cells", [])]
+    nc = ["\t".join(r) for r in t_new.get("cells", [])]
+    sm = SequenceMatcher(a=[n3(r) for r in oc], b=[n3(r) for r in nc], autojunk=False)
+    return sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in sm.get_opcodes() if op != "equal")
+
+
+def cross_chapter_tables(chapters: list[dict], old_tables: dict[str, dict],
+                         new_tables: dict[str, dict]) -> list[dict]:
+    """Document-wide post-pass: a table that changed chapters is a move, not two events.
+
+    :func:`tables_diff` compares the tables of *one* chapter mapping, so a table that sits
+    in 11.4.21 in the old edition and in 11.4.24 in the new one is never even put next to
+    its counterpart -- however good the measure is, it is counted once as a deletion and
+    once as an addition (4110: two identical certificate tables, similarity 1.000 and
+    0.995). This pass runs after all chapters are paired, puts every leftover ``removed``
+    against every leftover ``new`` of the *whole* document and assigns them globally, like
+    the paragraph aligner does with ``moved_away``/``moved_in``.
+
+    Additive: two values are added to ``kind``, the three existing ones keep their meaning,
+    and a record only changes when a partner above :data:`CROSS_CHAPTER_MIN` is found.
+    ``chapters`` is modified in place; the return value lists the moves.
+    """
+    # local import: keeps the SciPy/numpy import of align.paras out of module load
+    from .align.paras import _lsa
+
+    rem, add = [], []          # (chapter, index in its tables_diff, table dict)
+    for ch in chapters:
+        for k, r in enumerate(ch.get("tables_diff") or []):
+            if r["kind"] == "removed" and r.get("old") in old_tables:
+                rem.append((ch, k, old_tables[r["old"]]))
+            elif r["kind"] == "new" and r.get("new") in new_tables:
+                add.append((ch, k, new_tables[r["new"]]))
+    if not rem or not add:
+        return []
+
+    sim = [[table_similarity(t_old, t_new) for _, _, t_new in add] for _, _, t_old in rem]
+    rows, cols = _lsa([[-s for s in row] for row in sim])
+    moves = []
+    for a, b in zip(rows, cols):
+        score = sim[a][b]
+        if score < CROSS_CHAPTER_MIN:
+            continue
+        ch_old, k_old, t_old = rem[a]
+        ch_new, k_new, t_new = add[b]
+        changed = _rows_changed(t_old, t_new)
+        common = {"old": t_old["id"], "new": t_new["id"], "rows_changed": changed,
+                  "identical": changed == 0, "confidence": round(score, 3)}
+        ch_old["tables_diff"][k_old] = {
+            "kind": "moved_away", "caption": ch_old["tables_diff"][k_old].get("caption"),
+            "moved_to_chapter": ch_new.get("mapping_id"), **common}
+        ch_new["tables_diff"][k_new] = {
+            "kind": "moved_in", "caption": ch_new["tables_diff"][k_new].get("caption"),
+            "moved_from_chapter": ch_old.get("mapping_id"), **common}
+        moves.append({"from_chapter": ch_old.get("mapping_id"),
+                      "to_chapter": ch_new.get("mapping_id"), **common})
+    return moves
+
+
 def tables_diff(old_sec_list, new_sec_list, sim_backend) -> list[dict]:
     ot = [t for s in old_sec_list for t in s.get("tables", []) if not _is_fragment_table(t)]
     nt = [t for s in new_sec_list for t in s.get("tables", []) if not _is_fragment_table(t)]
@@ -291,11 +362,7 @@ def tables_diff(old_sec_list, new_sec_list, sim_backend) -> list[dict]:
             continue
         i, score = matched[j]
         t_old = ot[i]
-        oc = ["\t".join(r) for r in t_old.get("cells", [])]
-        nc = ["\t".join(r) for r in t_new.get("cells", [])]
-        sm = SequenceMatcher(a=[n3(r) for r in oc], b=[n3(r) for r in nc], autojunk=False)
-        changed_rows = sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in sm.get_opcodes()
-                           if op != "equal")
+        changed_rows = _rows_changed(t_old, t_new)
         out.append({"kind": "matched", "old": t_old["id"], "new": t_new["id"],
                     "caption": t_new.get("caption") or t_old.get("caption"),
                     "rows_changed": changed_rows,
@@ -472,6 +539,11 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
         ch["formulas_diff"] = formulas_diff(old_sec_list, new_sec_list)
         ch["tables_diff"] = tables_diff(old_sec_list, new_sec_list, sim_backend)
         chapters.append(ch)
+
+    # AP-23: tables that changed chapters -- a move, not a deletion plus an addition
+    cross_chapter_tables(chapters,
+                         {t["id"]: t for s in old_doc["sections"] for t in s.get("tables", [])},
+                         {t["id"]: t for s in new_doc["sections"] for t in s.get("tables", [])})
 
     # AP-11: where a removed text stands in the new edition, and whether that section was
     # in reach of the aligner. A marking on the record, nothing is filtered by it.
