@@ -207,6 +207,33 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **A table that changed chapters is a move, not a deletion plus an addition.** `tables_diff`
+  compares the tables of *one* chapter mapping, so a table standing in 11.4.21 in the old
+  edition and in 11.4.24 in the new one was never put next to its counterpart — two
+  identical certificate tables (similarity 1.000 and 0.995) were counted once as a deletion
+  and once as an addition. `cross_chapter_tables()` now runs after all chapters are paired,
+  puts every leftover `removed` against every leftover `new` of the whole document, assigns
+  them optimally (`linear_sum_assignment`) and reports a hit above `CROSS_CHAPTER_MIN = 0.80`
+  as `moved_away` at the old place (naming the new table and `moved_to_chapter`) and
+  `moved_in` at the new one (naming the old table and `moved_from_chapter`), with the same
+  row comparison a paired table gets. Additive: the three existing `kind` values keep their
+  meaning, and whoever reads `removed` gets fewer messages. The threshold is measured, not
+  set: on all three corpora 0.80 falls into the widest gap between two neighbouring assigned
+  pairs (4110 0.769 → 0.861, 4120 0.629 → 0.852, 60909 0.361 → 0.836). Effect: 9 / 5 / 1
+  moves, `removed` 55 → 40, 34 → 23, 6 → 4 and `new` 81 → 66, 63 → 52, 7 → 5. The annotated
+  HTML shows a moved table where it now stands and names the chapter it came from; the
+  interpretation prompt carries the cells of both ends as it did before.
+
+- **The head of a table carries its identity, the body does not.** The content window goes
+  back from ten rows to three (`CONTENT_ROWS`), and the 0.9 penalty stays gone. In a form
+  the first rows are the header both editions share and everything below is filled in, so a
+  wider window compares entries instead of tables (4110 B.11.2 0.850 → 0.407, E.13
+  0.954 → 0.287). Measured over all three corpora before the change: the narrow window loses
+  none of the repairs of the previous release — 10.3.4 and 10.3.5 pair identically at both
+  widths, only with higher confidence (0.62 → 0.985), which shows that repair came from
+  comparing the caption without its number — and wins back six pairings at 4110, six at 4120
+  and one at 60909.
+
 - **Tables are paired by what they say, not by the number in front of it.** The pairing
   was greedy over the new tables in document order, compared the *whole* caption
   including its number, and looked at the cells only when a caption was missing. In
