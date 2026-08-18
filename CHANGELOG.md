@@ -207,6 +207,31 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **The modality of a change is read off the sentences that changed, not off the whole
+  paragraph.** The paragraph maximum answered a different question than the change asks: a
+  paragraph keeping one "muss" reported "muss" on both sides however its other sentences
+  were rewritten, so `sollte → muss` next to it vanished — 8 % of the changes of one corpus
+  carry sentences of differing modality in one paragraph, which is the set in which the
+  aggregation had to lose something. `sentence_modality()` splits both versions with the
+  existing sentence splitter, pairs the sentences (a sentence diff for what is literally
+  unchanged, an optimal assignment inside every changed block, threshold
+  `SENTENCE_PAIR_MIN = 0.60`) and reports the **strongest shift among the pairs**: the
+  largest distance on `RANK`, ties going to the first pair in the new text. Without a moved
+  pair the two paragraph maxima stay in place, exactly as before. The new, additive
+  `modality.sentence_shifts` lists every moved pair and every sentence without a partner
+  (`hinzugefuegt`/`entfallen`), each with both labels and a shortened sentence, so what the
+  summary summarises stays readable.
+- **A swap inside the same deontic class is no shift.** `RANK` puts `darf` above `kann`, so
+  every one of those swaps read as a tightening — and the new edition of one corpus makes
+  that swap throughout as a wording alignment. `shift()` now returns `unveraendert` when
+  both labels carry the same deontic class (`LABEL_CLASS`, derived from `DEONTIC_CLASS`
+  with the two permission classes merged); `RANK` and `DEONTIC_CLASS` themselves are
+  untouched, because other places use them for the ordering they describe. Measured over
+  three corpora, the rule drops **37, 14 and 4** sentence pairs, every single one of them
+  `kann → darf` — the opposite direction does not occur. Together with the sentence scope
+  the reported shifts go from 74 to 27, from 41 to 16 and from 18 to 9, and **9, 6 and 1**
+  shifts that the paragraph maximum had masked appear for the first time. Nothing but
+  `changes[].modality` and `comparison.modality_shifts` moves.
 - **A `cosmetic` verdict no longer hides a substantive change.** A change whose visible
   operations are all filtered away is called cosmetic — right for hyphenation and
   typography, wrong for "mindestens 5 %" → "mindestens 1 %", whose single deleted digit is

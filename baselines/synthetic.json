@@ -5,8 +5,8 @@
    "sha256": "69a4a8c637815e090574eddeaf671705dc9c66d4b85ebd18aca352c88750f167"
   },
   "chapters.json": {
-   "bytes": 21310,
-   "sha256": "b1c3c3f9f0dce6d466a4345f3fc1262f50a8d07557bb59ddd0a284602a60c59b"
+   "bytes": 21857,
+   "sha256": "12337ceb7d9fc8b58f582fc840de9adc1d1ecee5a82658219a2dc6872d64d8f1"
   },
   "keywords.json": {
    "bytes": 726,
@@ -29,14 +29,14 @@
    "sha256": "c66cef209b0b1c0f614d55cd082413e2af726324e136bc693d448bd3f355813c"
   },
   "synopse.json": {
-   "bytes": 19404,
-   "sha256": "b478ef546a44e2b86c67799f4ae4b7929e9653f2029b08b2e65b608f5c66105e"
+   "bytes": 19951,
+   "sha256": "d4f0880b46630cfee451295b5e38d8cfe71cd21c6f2ba749d361ccae1bea9b9c"
   }
  },
- "created": "2026-08-12T20:01:25Z",
+ "created": "2026-08-18T12:15:36Z",
  "name": "synthetic",
  "normpare_version": "0.1.1",
- "reference_dir": "baselines/synthetic",
+ "reference_dir": "runs/AP-25_2026-08-18/synthetik/run",
  "schema": 1,
  "snapshot": {
   "norm_alt": {
