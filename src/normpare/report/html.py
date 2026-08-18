@@ -146,12 +146,18 @@ def _cell_changes(old_cells: list, new_cells: list) -> tuple[set, set]:
 
 def _render_tablediff(entry: dict, old_map: dict, new_map: dict) -> str:
     kind = entry.get("kind")
+    moved = ""
+    if kind == "moved_in":
+        # AP-23: at its new place a moved table is shown like a paired one, plus its origin
+        moved = ('<div class="tbl-note">Tabelle aus Kapitel '
+                 f'{html.escape(str(entry.get("moved_from_chapter")))} verschoben.</div>')
+        kind = "matched"
     if kind == "matched":
         ot, nt = old_map.get(entry.get("old")), new_map.get(entry.get("new"))
         if not nt:
             return ""
         if entry.get("identical") or not ot:
-            return ('<div class="tabpair"><div class="side">'
+            return (moved + '<div class="tabpair"><div class="side">'
                     '<h5>TABELLE (inhaltlich unverändert)</h5>'
                     + _html_table(nt, side="neu") + "</div></div>")
         # cell marking only for structurally equal tables (otherwise over-marking)
@@ -164,7 +170,7 @@ def _render_tablediff(entry: dict, old_map: dict, new_map: dict) -> str:
             note = ('<div class="tbl-note">Struktur geändert: '
                     f'{ot.get("n_rows")}×{ot.get("n_cols")} → {nt.get("n_rows")}×{nt.get("n_cols")} '
                     '(Zellen nicht einzeln markiert — siehe KI-Kennwertdeutung).</div>')
-        return (note + '<div class="tabpair">'
+        return (moved + note + '<div class="tabpair">'
                 '<div class="side"><h5>ALT</h5>' + _html_table(ot, chg_old, "alt") + "</div>"
                 '<div class="side"><h5>NEU</h5>' + _html_table(nt, chg_new, "neu") + "</div></div>")
     if kind == "new":
@@ -346,7 +352,9 @@ def build_annotated_html(new_doc: dict, synopse: dict, deutung: dict | None,
     tdiff_by_newid, tdiff_removed_by_sid = {}, {}
     for ch in synopse["chapters"]:
         for e in ch.get("tables_diff") or []:
-            if e.get("new"):
+            # a moved_away record names the new table too, but it belongs to the chapter
+            # the table left -- the entry to render at the table itself is the moved_in one
+            if e.get("new") and e.get("kind") != "moved_away":
                 tdiff_by_newid[e["new"]] = e
             elif e.get("kind") == "removed" and ch.get("new_id"):
                 tdiff_removed_by_sid.setdefault(ch["new_id"], []).append(e)

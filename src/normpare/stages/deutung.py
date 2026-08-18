@@ -935,6 +935,19 @@ def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict,
             tlines.append(f"  [ENTFALLEN] {cap}")
             if ot:
                 tlines.append("    ALT: " + _render_cells(ot, notes=notes))
+        elif kind == "moved_in":
+            # AP-23: the table came from another chapter -- its cells belong in the prompt
+            # here, where it now stands, as they did when it was reported as an addition
+            nt = nm.get(td.get("new"))
+            tlines.append(f"  [VERSCHOBEN AUS {td.get('moved_from_chapter')}] {cap}"
+                          f"  (geänderte Zeilen: {td.get('rows_changed', '?')})")
+            if nt:
+                tlines.append("    NEU: " + _render_cells(nt, notes=notes))
+        elif kind == "moved_away":
+            ot = om.get(td.get("old"))
+            tlines.append(f"  [VERSCHOBEN NACH {td.get('moved_to_chapter')}] {cap}")
+            if ot:
+                tlines.append("    ALT: " + _render_cells(ot, notes=notes))
     fo, fn = _figs(o_secs, ch.get("old_ids")), _figs(n_secs, ch.get("new_ids"))
     flines = []
     if fo:
