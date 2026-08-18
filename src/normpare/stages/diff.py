@@ -204,40 +204,104 @@ def _is_fragment_table(t: dict) -> bool:
     return ne <= 2
 
 
+#: What a caption looks like: keyword, number, separator, descriptive text. The number may
+#: be an annex letter ("A.1"); the separator is en/em dash, hyphen or colon -- a blank is
+#: deliberately not one, because "Tabelle 10 empfohlen." is a sentence end, not a caption.
+_CAPTION_RE = re.compile(
+    r"\s*(?:Tabellen?|Tab\.|Bild(?:er)?|Abbildung|Table|Figure|Fig\.)\s*"
+    r"([0-9]+(?:\.[0-9]+)*|[A-Za-z](?:\.[0-9]+)*)\s*[–—:-]\s*(\S.*)", re.I)
+#: Below this many characters the descriptive rest is not a description.
+MIN_CAPTION_TEXT = 3
+#: Rows and characters of the cell text that enter the content comparison (AP-22: three
+#: rows were often just the header of both tables).
+CONTENT_ROWS = 10
+CONTENT_CHARS = 400
+#: From this score on an assigned pair counts as the same table. Applied *after* the
+#: assignment: a pair below it falls apart into "removed" + "new".
+TABLE_MATCH_MIN = 0.55
+
+
+def caption_text(caption: str | None) -> str | None:
+    """The descriptive part of a table/figure caption, or ``None`` if the string is not one.
+
+    Two jobs in one place (AP-22). First hygiene: PDF extraction regularly puts the tail of
+    the preceding sentence into the caption field ("Tabelle 10 empfohlen."), and because
+    that field was not empty, the caption comparison ran on garbage. Such a string is
+    treated like a missing caption -- it is not deleted, it just does not count.
+
+    Second, the number is dropped: in a renumbered edition it is the least reliable part of
+    the caption while the descriptive rest is the carrier ("Tabelle 11 - Einstellwerte X"
+    and "Tabelle 17 - Einstellwerte X" are the same table).
+    """
+    m = _CAPTION_RE.fullmatch(caption or "")
+    if not m:
+        return None
+    text = m.group(2).strip()
+    return text if len(text) >= MIN_CAPTION_TEXT else None
+
+
+def _content_key(t: dict) -> str:
+    rows = (t.get("cells") or [])[:CONTENT_ROWS]
+    return n3(" ".join(" ".join(r) for r in rows))[:CONTENT_CHARS]
+
+
+def table_similarity(t_old: dict, t_new: dict) -> float:
+    """How much two tables look like the same table: the stronger of both signals.
+
+    Caption (without its number) and cell content are always both measured and the higher
+    value wins. The content used to be a fallback reached only when a caption was missing,
+    and carried a 0.9 penalty for being one; both are gone -- a table whose caption was
+    rewritten is still recognizable by its rows, and vice versa.
+    """
+    ca, cb = caption_text(t_old.get("caption")), caption_text(t_new.get("caption"))
+    by_caption = SequenceMatcher(None, n3(ca), n3(cb)).ratio() if ca and cb else 0.0
+    fa, fb = _content_key(t_old), _content_key(t_new)
+    by_content = SequenceMatcher(None, fa, fb).ratio() if fa and fb else 0.0
+    return max(by_caption, by_content)
+
+
+def _assign_tables(ot: list[dict], nt: list[dict]) -> dict[int, tuple[int, float]]:
+    """Globally assign old to new tables (Hungarian), keyed by the index of the new table.
+
+    The greedy predecessor walked the new tables in document order and took the best free
+    old partner for each, so an early table could take a partner that a later one needed
+    (4110/10.3.4: new table 16 took old table 11 before new 17 was ever asked). The
+    paragraph aligner has solved the same problem with an optimal assignment all along;
+    this uses its wrapper, and with it SciPy, which the project already depends on.
+    """
+    if not ot or not nt:
+        return {}
+    # local import: keeps the SciPy/numpy import of align.paras out of module load
+    from .align.paras import _lsa
+
+    sim = [[table_similarity(t_old, t_new) for t_new in nt] for t_old in ot]
+    rows, cols = _lsa([[-s for s in row] for row in sim])
+    return {int(j): (int(i), sim[i][j]) for i, j in zip(rows, cols)
+            if sim[i][j] >= TABLE_MATCH_MIN}
+
+
 def tables_diff(old_sec_list, new_sec_list, sim_backend) -> list[dict]:
     ot = [t for s in old_sec_list for t in s.get("tables", []) if not _is_fragment_table(t)]
     nt = [t for s in new_sec_list for t in s.get("tables", []) if not _is_fragment_table(t)]
+    matched = _assign_tables(ot, nt)
     out = []
-    used_o = set()
-    for t_new in nt:
-        best, bs = None, 0.0
-        for i, t_old in enumerate(ot):
-            if i in used_o:
-                continue
-            ca, cb = t_old.get("caption") or "", t_new.get("caption") or ""
-            if ca and cb:
-                s = SequenceMatcher(None, n3(ca), n3(cb)).ratio()
-            else:
-                fa = " ".join(" ".join(r) for r in t_old.get("cells", [])[:3])
-                fb = " ".join(" ".join(r) for r in t_new.get("cells", [])[:3])
-                s = SequenceMatcher(None, n3(fa)[:400], n3(fb)[:400]).ratio() * 0.9
-            if s > bs:
-                best, bs = i, s
-        if best is not None and bs >= 0.55:
-            used_o.add(best)
-            t_old = ot[best]
-            oc = ["\t".join(r) for r in t_old.get("cells", [])]
-            nc = ["\t".join(r) for r in t_new.get("cells", [])]
-            sm = SequenceMatcher(a=[n3(r) for r in oc], b=[n3(r) for r in nc], autojunk=False)
-            changed_rows = sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in sm.get_opcodes()
-                               if op != "equal")
-            out.append({"kind": "matched", "old": t_old["id"], "new": t_new["id"],
-                        "caption": t_new.get("caption") or t_old.get("caption"),
-                        "rows_changed": changed_rows,
-                        "identical": changed_rows == 0,
-                        "confidence": round(bs, 3)})
-        else:
+    for j, t_new in enumerate(nt):
+        if j not in matched:
             out.append({"kind": "new", "new": t_new["id"], "caption": t_new.get("caption")})
+            continue
+        i, score = matched[j]
+        t_old = ot[i]
+        oc = ["\t".join(r) for r in t_old.get("cells", [])]
+        nc = ["\t".join(r) for r in t_new.get("cells", [])]
+        sm = SequenceMatcher(a=[n3(r) for r in oc], b=[n3(r) for r in nc], autojunk=False)
+        changed_rows = sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in sm.get_opcodes()
+                           if op != "equal")
+        out.append({"kind": "matched", "old": t_old["id"], "new": t_new["id"],
+                    "caption": t_new.get("caption") or t_old.get("caption"),
+                    "rows_changed": changed_rows,
+                    "identical": changed_rows == 0,
+                    "confidence": round(score, 3)})
+    used_o = {i for i, _ in matched.values()}
     for i, t_old in enumerate(ot):
         if i not in used_o:
             out.append({"kind": "removed", "old": t_old["id"], "caption": t_old.get("caption")})
