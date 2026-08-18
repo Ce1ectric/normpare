@@ -239,7 +239,26 @@ def classify_paragraph(text: str) -> dict:
     return {"max": mx, "counts": counts, "sentences": labeled}
 
 
+#: The deontic class of a *label*, which is what :func:`shift` compares. Derived from
+#: :data:`DEONTIC_CLASS` through :data:`_LABEL`, with one merge on top: ``moeglichkeit``
+#: ("kann") and ``zulaessigkeit`` ("darf") are the same permission. The new edition of
+#: 4110 turns "kann" into "darf" throughout -- a wording alignment, not a change of legal
+#: consequence -- and reading it off :data:`RANK` alone made every one of those a
+#: tightening (4110 11.5.6, 11.6.6/3, ``notizen/Befunde_aus_der_Deutung.md``).
+LABEL_CLASS = {label: ("zulaessigkeit" if DEONTIC_CLASS[k] == "moeglichkeit"
+                       else DEONTIC_CLASS[k]) for k, label in _LABEL.items()}
+
+
 def shift(old_max: str, new_max: str) -> str:
+    """How the bindingness moved: ``verschaerft``, ``gelockert`` or ``unveraendert``.
+
+    Two labels of the same deontic class do not move, whatever :data:`RANK` says about
+    them -- ranks order the six labels for aggregation, they do not measure the distance
+    between a permission and a permission. :data:`RANK` itself is untouched: other places
+    (``_mod_max``, ``tools/modality_audit.py``) use it for exactly that ordering.
+    """
+    if LABEL_CLASS.get(old_max, old_max) == LABEL_CLASS.get(new_max, new_max):
+        return "unveraendert"
     ro, rn = RANK.get(old_max, 0), RANK.get(new_max, 0)
     if rn > ro:
         return "verschaerft"

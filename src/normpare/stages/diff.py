@@ -19,7 +19,7 @@ from pathlib import Path
 from .align.sections import mapping_id
 from .enrich import modality, refs, values
 from .review_removed import annotate_relocation
-from ..text.textnorm import compare_key, garbage_ratio, n1, n2, n3
+from ..text.textnorm import compare_key, garbage_ratio, n1, n2, n3, split_sentences
 
 _TOKEN = re.compile(r"(\s+|[.,;:!?(){}\[\]/–—„“”\"'])")
 _ALNUM = re.compile(r"[0-9A-Za-zÄÖÜäöüß]")
@@ -188,6 +188,110 @@ def cosmetic_lifted_by(old_t: str, new_t: str, kennwerte: dict, refs_diff: dict)
            ("internal_added", "internal_removed", "external_added", "external_removed")):
         return "refs"
     return None
+
+
+#: How similar two sentences have to be, as a character ratio on N3, to count as the same
+#: sentence reworded instead of one sentence gone and another one arrived. Measured on all
+#: three corpora (``runs/AP-25_2026-08-18/schwelle.txt``).
+SENTENCE_PAIR_MIN = 0.6
+#: Characters of a sentence kept in ``sentence_shifts`` -- enough to recognise the sentence,
+#: not a second copy of the text, which the record already carries in full.
+SENTENCE_EXCERPT = 160
+
+
+def _excerpt(s: str) -> str:
+    s = (s or "").strip()
+    return s if len(s) <= SENTENCE_EXCERPT else s[:SENTENCE_EXCERPT] + " …"
+
+
+def _pair_order(p: tuple):
+    """Position in the *new* text; a sentence without a successor comes last."""
+    i, j = p
+    return (j is None, -1 if j is None else j, -1 if i is None else i)
+
+
+def _pair_sentences(olds: list[str], news: list[str]) -> list[tuple]:
+    """Pair the sentences of two versions: ``(i, j)``, ``(i, None)``, ``(None, j)``.
+
+    The sentence diff first: what is literally unchanged pairs by position, which no
+    similarity measure could do better and which keeps the common case cheap. Only inside
+    a changed block are the sentences assigned optimally, by the same Hungarian wrapper the
+    paragraph aligner uses -- a block may hold one rewritten and one dropped sentence, and
+    walking it diagonally would pair the wrong two.
+    """
+    a, b = [n3(s) for s in olds], [n3(s) for s in news]
+    out: list[tuple] = []
+    for op, i1, i2, j1, j2 in SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+        if op == "equal":
+            out.extend((i1 + k, j1 + k) for k in range(i2 - i1))
+            continue
+        block, taken_o, taken_n = [], set(), set()
+        if i2 > i1 and j2 > j1:
+            # local import: keeps the SciPy/numpy import of align.paras out of module load
+            from .align.paras import _lsa
+
+            sim = [[SequenceMatcher(None, a[i], b[j]).ratio() for j in range(j1, j2)]
+                   for i in range(i1, i2)]
+            rows, cols = _lsa([[-s for s in row] for row in sim])
+            for x, y in zip(rows, cols):
+                if sim[x][y] >= SENTENCE_PAIR_MIN:
+                    block.append((i1 + x, j1 + y))
+                    taken_o.add(i1 + x)
+                    taken_n.add(j1 + y)
+        block.extend((i, None) for i in range(i1, i2) if i not in taken_o)
+        block.extend((None, j) for j in range(j1, j2) if j not in taken_n)
+        out.extend(sorted(block, key=_pair_order))
+    return out
+
+
+def sentence_modality(old_t: str, new_t: str, old_max: str | None = None,
+                      new_max: str | None = None) -> dict:
+    """Modality of a change, measured over the sentences that changed (AP-25).
+
+    The paragraph maximum answers a different question than the one asked here. It says how
+    binding a paragraph is; a change wants to know what moved. A paragraph that keeps one
+    "muss" reports "muss" on both sides however its other sentences are rewritten, so
+    ``sollte -> muss`` next to it vanishes -- at 4110 that is the case of 4.2.1/0, and 204
+    of 2506 changes (8 %) carry sentences of differing modality in one paragraph, which is
+    the set in which the aggregation has to lose something.
+
+    ``old``/``new``/``shift`` therefore describe the **strongest shift among the sentence
+    pairs**: the largest distance on :data:`~normpare.stages.enrich.modality.RANK`, ties
+    going to the first one in the new text. Without a moved pair the two paragraph maxima
+    (``old_max``/``new_max``, computed from the text when not given) stay in place, exactly
+    as before AP-25. ``sentence_shifts`` lists every moved pair and every sentence without a
+    partner, so what the summary summarises stays readable.
+    """
+    olds, news = split_sentences(old_t or ""), split_sentences(new_t or "")
+    shifts = []
+    for i, j in _pair_sentences(olds, news):
+        if i is not None and j is not None:
+            if n3(olds[i]) == n3(news[j]):
+                continue                                # nobody touched this sentence
+            om = modality.classify_sentence(olds[i])
+            nm = modality.classify_sentence(news[j])
+            sh = modality.shift(om, nm)
+            if sh != "unveraendert":
+                shifts.append({"old": om, "new": nm, "shift": sh,
+                               "sentence": _excerpt(news[j])})
+        elif j is not None:
+            shifts.append({"old": None, "new": modality.classify_sentence(news[j]),
+                           "shift": "hinzugefuegt", "sentence": _excerpt(news[j])})
+        else:
+            shifts.append({"old": modality.classify_sentence(olds[i]), "new": None,
+                           "shift": "entfallen", "sentence": _excerpt(olds[i])})
+    moved = [s for s in shifts if s["shift"] in ("verschaerft", "gelockert")]
+    if moved:
+        # max() keeps the first of equal keys -> ties go to the first pair in the text
+        best = max(moved, key=lambda s: abs(modality.RANK[s["new"]] - modality.RANK[s["old"]]))
+        return {"old": best["old"], "new": best["new"], "shift": best["shift"],
+                "sentence_shifts": shifts}
+    if old_max is None:
+        old_max = modality.classify_paragraph(old_t or "")["max"]
+    if new_max is None:
+        new_max = modality.classify_paragraph(new_t or "")["max"]
+    return {"old": old_max, "new": new_max, "shift": "unveraendert",
+            "sentence_shifts": shifts}
 
 
 def _mod_max(paras: list[dict]) -> str:
@@ -437,8 +541,7 @@ def _para_change(kind: str, olds: list[dict], news: list[dict], conf: float,
         else:
             rec["semantic_equal"] = False
         rec["kennwerte"] = kennwerte
-        om, nm = _mod_max(olds), _mod_max(news)
-        rec["modality"] = {"old": om, "new": nm, "shift": modality.shift(om, nm)}
+        rec["modality"] = sentence_modality(old_t, new_t, _mod_max(olds), _mod_max(news))
         rec["refs"] = refs_diff
     elif news:
         rec["modality"] = {"new": _mod_max(news)}

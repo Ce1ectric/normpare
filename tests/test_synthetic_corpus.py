@@ -249,8 +249,12 @@ def test_modality_change_is_detected(expectation, synthetic_run):
     change = hits[0]
     assert _contains_excerpt(change.get("old_text"), old_text), \
         "the change does not carry the old wording it replaces"
-    assert (change.get("modality") or {}) == {"old": "sollte", "new": "muss",
-                                              "shift": "verschaerft"}
+    mod = change.get("modality") or {}
+    assert (mod.get("old"), mod.get("new"), mod.get("shift")) == ("sollte", "muss",
+                                                                 "verschaerft")
+    # AP-25: the shift is read off the changed sentence pair, and the pair stays visible
+    assert [(s["old"], s["new"], s["shift"]) for s in mod.get("sentence_shifts") or []] \
+        == [("sollte", "muss", "verschaerft")]
 
 
 # -- the interpretation stage joins back onto its chapters (AP-06) --------------------------
