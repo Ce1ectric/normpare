@@ -207,6 +207,28 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **A `cosmetic` verdict no longer hides a substantive change.** A change whose visible
+  operations are all filtered away is called cosmetic — right for hyphenation and
+  typography, wrong for "mindestens 5 %" → "mindestens 1 %", whose single deleted digit is
+  not substantive on its own. Three signals now veto the verdict: a changed parameter value
+  (`kennwerte.changed`), a changed set of qualifier words (`QUALIFIER_WORDS`, a closed list
+  of ten words that turn a duty into a reservation or back), or a changed reference
+  (`refs_diff`, all four lists). The change falls back to `similar` and is not marked
+  semantically equal. Counting digits is deliberately **not** implemented: "some digit
+  differs" would hit 53 of 75 cosmetic changes in one corpus and 55 of 82 in the other —
+  standard numbers, years and cross-references. Measured over three corpora, **18 of 75,
+  14 of 82 and 1 of 35** verdicts fall, most of them over a changed reference.
+- **A paragraph split in two is one change, not two.** The new edition splits an old
+  paragraph; the aligner paired the first half and reported the second one as `new`
+  although it stood verbatim in the old text — the same sentence counted once as a deletion
+  and once as an addition. A post-pass after all existing passes takes a leftover new
+  paragraph of at least 40 comparison-key characters whose text is contained in an already
+  paired old paragraph, widens that pairing to 1:2 and reports it as `split`; containment,
+  never a lowered threshold. One old paragraph absorbs at most one extra half — further
+  hits stay `new` and are counted, which keeps a collective paragraph such as a
+  bibliography from swallowing every new entry. Effect over three corpora: `new` drops from
+  1269 to 1220, from 1021 to 965 and from 1219 to 1211. Nothing but `changes[].kind`,
+  `changes[].semantic_equal` and the pairing itself moves.
 - **A table that changed chapters is a move, not a deletion plus an addition.** `tables_diff`
   compares the tables of *one* chapter mapping, so a table standing in 11.4.21 in the old
   edition and in 11.4.24 in the new one was never put next to its counterpart — two
