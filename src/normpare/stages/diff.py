@@ -656,8 +656,15 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
                 extra = {}
                 if l["kind"] == "moved_away":
                     extra["moved_to"] = l.get("moved_to")
+                    # AP-26: a block continuation proves the chapter, not the paragraph --
+                    # then there is no moved_to and the chapter is all that may be said
+                    if l.get("moved_to_chapter"):
+                        extra["moved_to_chapter"] = l["moved_to_chapter"]
                 if l["kind"] == "moved_in":
                     extra["moved_from"] = l.get("moved_from")
+                # AP-26: a candidate the check rule did not confirm -- stays a removal
+                if l.get("possible_move_to"):
+                    extra["possible_move_to"] = l["possible_move_to"]
                 c = _para_change(l["kind"], olds, news, l.get("confidence", 0.0), extra)
                 if c["kind"] == "cosmetic" and c.get("syntactic", {}).get("change_ratio", 0) == 0:
                     ch["n_identical"] += 1

@@ -50,7 +50,7 @@ OLD_SURPLUS_MIN = 5
 
 #: The reasons a removal can carry, in the order they are reported. A removal may carry
 #: several; they are all kept, because they say different things.
-REVIEW_REASONS = ("relocated_outside_mapping", "missed_inside_mapping",
+REVIEW_REASONS = ("possible_move", "relocated_outside_mapping", "missed_inside_mapping",
                   "unbalanced_mapping")
 
 #: The reasons that put a removal *on* the list. ``unbalanced_mapping`` is deliberately
@@ -59,7 +59,7 @@ REVIEW_REASONS = ("relocated_outside_mapping", "missed_inside_mapping",
 #: stream -- 95 of 111 entries on 4110 rested on the surplus and nothing else. It stays a
 #: reason on entries that earned their place, and it stays the third sort key, because it
 #: does order the list well. What it must not do is fill it.
-ADMITTING_REASONS = ("relocated_outside_mapping", "missed_inside_mapping")
+ADMITTING_REASONS = ("possible_move", "relocated_outside_mapping", "missed_inside_mapping")
 
 
 # -- coverage over word trigrams -------------------------------------------------------
@@ -136,6 +136,11 @@ def _reasons(change: dict, old_surplus: int) -> list[str]:
     reloc = change.get("relocation") or {}
     found = reloc.get("best_score", 0.0) >= RELOCATION_TAU
     holds = {
+        # AP-26: the cross-chapter pass found a candidate but could not prove the move
+        # (values differ, or the pair is not mutually best). The software says what it
+        # saw and leaves the verdict to a reader -- and for the training material this is
+        # the interesting class: "the requirement is at X now, but the values differ".
+        "possible_move": bool(change.get("possible_move_to")),
         "relocated_outside_mapping": found and not reloc.get("in_mapping"),
         "missed_inside_mapping": found and bool(reloc.get("in_mapping")),
         "unbalanced_mapping": old_surplus >= OLD_SURPLUS_MIN,
@@ -150,8 +155,9 @@ def _sort_key(entry: dict) -> tuple:
     same coverage would otherwise depend on dict order.
     """
     reasons = entry["review_reasons"]
-    rank = (0 if "relocated_outside_mapping" in reasons
-            else 1 if "missed_inside_mapping" in reasons else 2)
+    rank = (0 if "possible_move" in reasons
+            else 1 if "relocated_outside_mapping" in reasons
+            else 2 if "missed_inside_mapping" in reasons else 3)
     return (rank,
             -(entry.get("relocation") or {}).get("best_score", 0.0),
             -entry["old_surplus"],
@@ -169,21 +175,27 @@ def review_entries(synopse: dict) -> list[dict]:
     for ch in synopse.get("chapters") or []:
         old_surplus = (ch.get("paragraph_balance") or {}).get("old_surplus") or 0
         for change in ch.get("changes") or []:
-            if change.get("kind") != "removed" or "relocation" not in change:
+            # a possible move is judged whatever its length: the pass that found it has
+            # already looked at the text, so the length argument of MIN_CHARS is spent
+            judged = "relocation" in change or change.get("possible_move_to")
+            if change.get("kind") != "removed" or not judged:
                 continue
             reasons = _reasons(change, old_surplus)
             if not any(r in ADMITTING_REASONS for r in reasons):
                 continue
-            entries.append({
+            entry = {
                 "mapping_id": ch.get("mapping_id") or ch.get("new_id") or ch.get("old_id"),
                 "old_ids": change.get("old_ids") or [],
                 "title": ch.get("title"),
                 "old_text": change.get("old_text"),
                 "chars": len(change.get("old_text") or ""),
                 "review_reasons": reasons,
-                "relocation": change["relocation"],
+                "relocation": change.get("relocation"),
                 "old_surplus": old_surplus,
-            })
+            }
+            if change.get("possible_move_to"):
+                entry["possible_move"] = change["possible_move_to"]
+            entries.append(entry)
     return sorted(entries, key=_sort_key)
 
 

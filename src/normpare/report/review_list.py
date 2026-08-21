@@ -25,6 +25,10 @@ CASE_CHARS = 200
 
 #: What each reason means, for a reader who has not read AP-09 and AP-10.
 REASON_TEXT = {
+    "possible_move":
+        "im neuen Dokument steht ein sehr ähnlicher Absatz in einem anderen Kapitel, "
+        "die Prüfregel bestätigt die Verschiebung aber nicht (AP-26) — die Kennwerte "
+        "weichen ab oder das Paar ist nicht wechselseitig das beste",
     "relocated_outside_mapping":
         "Text steht im neuen Dokument, aber außerhalb der zugeordneten Abschnitte — "
         "der Absatz-Aligner konnte ihn nie sehen (Kapitelzuordnung)",
@@ -66,6 +70,11 @@ def _case(index: int, entry: dict, titles: dict) -> list[str]:
                      + (f" — {title}" if title else "")
                      + f", Überdeckung {reloc['best_score']:.2f}"
                      + ("" if reloc.get("in_mapping") else " (außerhalb der Zuordnung)"))
+    move = entry.get("possible_move")
+    if move:
+        lines.append(f"- möglicher Umzug nach `{move.get('chapter')}` "
+                     f"(`{move.get('new_id')}`, Ähnlichkeit {move.get('similarity'):.2f}) "
+                     f"— nicht bestätigt: {', '.join(move.get('failed') or [])}")
     return lines + ["", f"> {_shorten(entry.get('old_text') or '')}", ""]
 
 

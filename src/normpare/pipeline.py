@@ -118,12 +118,15 @@ class Pipeline:
               f"{align_stats.get('split_absorbed', 0)}"
               f" (liegen geblieben: {align_stats.get('split_skipped', 0)})")
         if self.cfg.embed_fallback:
-            from .stages.align.paras import embed_rescue_pass
+            from .stages.align.paras import embed_move_pass, embed_rescue_pass
             from .text.similarity import load_embed_backend
             embed = load_embed_backend(self.cfg.embed_model,
                                        cache_path=self.out / ".vec_cache.npz")
             mapping["embed_rescue"] = embed_rescue_pass(
                 old, new, mapping["records"], embed, tau_embed=self.cfg.tau_embed)
+            # AP-26: after the in-chapter rescue, the cross-chapter moves -- with the
+            # check rule, so a move is only claimed where it is proven
+            mapping["embed_moves"] = embed_move_pass(old, new, mapping["records"], embed)
             if getattr(embed, "cache", None) is not None:
                 embed.cache.flush()
         _write(self.out / "mapping.json", mapping)

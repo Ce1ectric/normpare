@@ -848,6 +848,9 @@ def _change_block(i: int, c: dict) -> str:
         L.append(f"    (hierher verschoben aus {c['moved_from']})")
     if c.get("moved_to"):
         L.append(f"    (verschoben nach {c['moved_to']})")
+    elif c.get("moved_to_chapter"):
+        # AP-26 block continuation: the chapter is proven, the paragraph is not
+        L.append(f"    (verschoben nach Kapitel {c['moved_to_chapter']})")
     if c.get("old_text"):
         L.append(f"    ALT: {_clip(c['old_text'], 900)}")
     if c.get("new_text"):

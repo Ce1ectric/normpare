@@ -149,6 +149,8 @@ def build_docx_synopse(synopse: dict, deutung: dict | None, out_path: str | Path
                 info.add_run(f"aus {c['moved_from']}\n").font.color.rgb = BLUE
             if c.get("moved_to"):
                 info.add_run(f"nach {c['moved_to']}\n").font.color.rgb = BLUE
+            elif c.get("moved_to_chapter"):      # AP-26: chapter proven, paragraph not
+                info.add_run(f"nach Kapitel {c['moved_to_chapter']}\n").font.color.rgb = BLUE
             dd = deut_map.get(ci)
             if dd:
                 r = info.add_run(f"{_lbl(dd.get('semantic_label',''), lang)}: {dd.get('change','')}")

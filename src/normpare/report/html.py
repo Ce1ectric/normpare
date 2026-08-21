@@ -485,7 +485,10 @@ def build_annotated_html(new_doc: dict, synopse: dict, deutung: dict | None,
                 body.append(f'<div class="para {cls}"><span class="meta">[{lab}]</span> '
                             f'{_term_wrap(html.escape(c.get("new_text") or ""), nids)}{kwb}</div>{deut_html}')
             elif k in ("removed", "moved_away"):
-                lab = "ENTFALLEN" if k == "removed" else f'verschoben nach {html.escape(str(c.get("moved_to")))}'
+                # AP-26: a block continuation names only the target chapter -- saying the
+                # paragraph would claim more than was measured
+                target = c.get("moved_to") or c.get("moved_to_chapter")
+                lab = "ENTFALLEN" if k == "removed" else f'verschoben nach {html.escape(str(target))}'
                 no = f'<span class="meta">{html.escape(c["term_no"])}</span>&ensp;' if c.get("term_no") else ""
                 body.append(f'<div class="para p-removed"><span class="meta">[{lab}]</span> {no}'
                             f'<span class="txt">{html.escape(c.get("old_text") or "")}</span></div>{deut_html}')
