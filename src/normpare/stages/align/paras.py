@@ -64,11 +64,13 @@ MOVED_MIN_LEN = 40
 #: ``tau_moved``: short texts reach a moderate similarity by chance.
 MOVED_SHORT_LEN = 80
 
-#: Threshold for a short move. Measured, not set (AP-26, ``runs/AP-26_2026-08-21``):
-#: the similarities of the assigned short candidate pairs split at this value on both
-#: corpora -- below it the pairs are unrelated technical sentences, above it they are the
-#: same sentence in a new place.
-TAU_MOVED_SHORT = 0.90
+#: Threshold for a short move. Measured, not set (AP-26, ``schwelle_kurz.txt``): the
+#: assigned short candidate pairs have their largest gap just above 0.70 on all three
+#: corpora -- 0.697 to 0.816 (4110), 0.682 to 0.856 (4120), 0.719 to 0.819 (60909) -- and
+#: 0.80 is the one value inside all three. Above it every pair is the same sentence in a
+#: new place; below it genuine and invented pairs mix. The same value AP-23 measured for
+#: tables, on a different measure and a different object.
+TAU_MOVED_SHORT = 0.80
 
 #: Threshold for a cross-chapter embedding move (AP-26 part C). Higher than the 0.82 of
 #: the in-chapter rescue pass, because the claim is stronger: not "this paragraph was
@@ -363,6 +365,14 @@ def _chapter_of(link: dict, chapter_of_new: dict) -> str | None:
     return link.get("moved_to_chapter")
 
 
+def _neighbour(order: list[dict], start: int, step: int) -> dict | None:
+    """The nearest link that is not a removal, seen from ``start`` in direction ``step``."""
+    k = start + step
+    while 0 <= k < len(order) and order[k]["kind"] == "removed":
+        k += step
+    return order[k] if 0 <= k < len(order) else None
+
+
 def block_continuation_pass(old_doc, new_doc, mapping_records) -> list[dict]:
     """AP-26 part A: a removed paragraph between two moves went with them.
 
@@ -394,17 +404,10 @@ def block_continuation_pass(old_doc, new_doc, mapping_records) -> list[dict]:
                  for sid in old_ids for p in _paras(o_secs.get(sid, {"paragraphs": []}))]
         order = [l for l in order if l is not None]
 
-        def _neighbour(start: int, step: int):
-            """The nearest link that is not a removal, seen from ``start``."""
-            k = start + step
-            while 0 <= k < len(order) and order[k]["kind"] == "removed":
-                k += step
-            return order[k] if 0 <= k < len(order) else None
-
         for k, link in enumerate(order):
             if link["kind"] != "removed":
                 continue
-            before, after = _neighbour(k, -1), _neighbour(k, 1)
+            before, after = _neighbour(order, k, -1), _neighbour(order, k, 1)
             if not before or not after:
                 continue
             if before["kind"] != "moved_away" or after["kind"] != "moved_away":
@@ -539,8 +542,8 @@ def embed_move_pass(old_doc, new_doc, mapping_records, embed_backend,
         s = float(sim[a, b])
         if s < tau:
             continue
-        r_rec, r_link, r_p = rem[a]
-        n_rec, n_link, n_p = new[b]
+        _, r_link, r_p = rem[a]
+        _, n_link, n_p = new[b]
         failed = []
         if not values_are_consistent(_txt(r_p), _txt(n_p)):
             failed.append("kennwerte")
