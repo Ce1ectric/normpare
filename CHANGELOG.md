@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **DeepSeek as an interpretation provider — thinking off, and counted when it happened
+  anyway.** `deepseek-v4-flash` needs no provider of its own: `--provider
+  openai_compatible --base-url https://api.deepseek.com --model deepseek-v4-flash` covers
+  it, and the token budget (`MAX_ANSWER_TOKENS = 48000`) fits its limits.
+  - The OpenAI-compatible request body now carries `"thinking": {"type": "disabled"}`, the
+    same value the Anthropic path has sent since AP-18. Without it every request against
+    DeepSeek would run in thinking mode (default effort `high`): the chain of thought is
+    billed as output, and `temperature: 0` — which the pipeline sets for reproducibility —
+    is ignored while thinking is on. No per-provider special case; providers that do not
+    know the field ignore unknown fields.
+  - Should an answer come back with a `reasoning_content` field anyway, the provider
+    thought and billed it. That is counted per request and reported in the summary of the
+    interpretation stage and in `pipeline_feedback` (`field: "reasoning"`) — both only
+    when the count is non-zero. The field is never parsed and never cached: it holds what
+    the model discarded, not what it answered.
+  - `docs/providers.md` documents DeepSeek as the worked example for `openai_compatible`.
+    `--batch` has no effect there: the message-batch API is Anthropic's, and every other
+    provider falls back to sequential calls.
+
 - **Interpretation without an API: the prompts go out, the answers come back in.** The
   answer cache is keyed on `model + system prompt + user prompt` and knows nothing about
   the provider, so a JSON file under the right key *is* an interpretation — the pipeline
