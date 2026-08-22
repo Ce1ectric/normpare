@@ -489,6 +489,10 @@ class LlmClient:
         self.max_retries = max_retries
         #: tag -> why this chapter has an answer, or has none (see :data:`ANSWER_OUTCOMES`)
         self.outcomes: dict[str, str] = {}
+        #: How many answers arrived with a chain of thought although thinking was switched
+        #: off (AP-27). Counted per *request*, retries included: every one of them is
+        #: billed. See :meth:`_complete_openai_compatible`.
+        self.n_reasoning = 0
         self.api_version = api_version         # Azure only
         cache_dir.mkdir(parents=True, exist_ok=True)
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -557,6 +561,13 @@ class LlmClient:
             "model": self.model,
             "max_tokens": max_tokens,
             "temperature": 0,
+            # Disable extended thinking, with the same value the Anthropic path sends.
+            # DeepSeek thinks by default (effort "high"), which costs twice for a
+            # structured extraction task: the chain of thought is billed as output, and
+            # `temperature` -- 0 above, for reproducibility -- is ignored while thinking is
+            # on. Providers that do not know the field ignore it; no per-provider special
+            # case is made until one is observed to complain (AP-27).
+            "thinking": {"type": "disabled"},
             "messages": [
                 {"role": "system", "content": self.system},
                 {"role": "user", "content": user},
@@ -572,10 +583,16 @@ class LlmClient:
         with urllib.request.urlopen(req, timeout=180) as r:
             resp = json.loads(r.read().decode("utf-8"))
         choice = resp["choices"][0]
+        message = choice["message"]
+        # The provider thought anyway: the field is the chain of thought next to the answer,
+        # and it is billed as output. Only counted -- never parsed, never cached: it holds
+        # what the model discarded, not what it answered.
+        if message.get("reasoning_content"):
+            self.n_reasoning += 1
         # OpenAI calls the same condition "length"; translated here so the stage sees one
         # vocabulary regardless of the backend
         stop = "max_tokens" if choice.get("finish_reason") == "length" else choice.get("finish_reason")
-        return choice["message"]["content"].strip(), stop
+        return message["content"].strip(), stop
 
     def _complete(self, user: str, max_tokens: int) -> tuple[str, str | None]:
         if self.provider == "anthropic":
@@ -764,6 +781,11 @@ class LiveProvider:
     @property
     def outcomes(self) -> dict[str, str]:
         return self.client.outcomes
+
+    @property
+    def n_reasoning(self) -> int:
+        """Answers that carried a chain of thought despite thinking being off (AP-27)."""
+        return self.client.n_reasoning
 
     def resolve(self, items: list[tuple[str, str]]) -> dict[str, dict | None]:
         if self.batch:
@@ -1624,18 +1646,26 @@ def coverage_feedback(coverage: dict) -> dict:
 
 def answer_summary(n_chapters: int, n_interpreted: int, lost: list[dict],
                    prompt_dir: Path | str | None = None,
-                   coverage: dict | None = None) -> list[str]:
+                   coverage: dict | None = None, n_reasoning: int = 0) -> list[str]:
     """The console summary of the interpretation stage, one line per reason.
 
     Args:
         lost: ``{"mapping_id", "reason"}`` per chapter without an interpretation.
         prompt_dir: where the prompts and raw answers were kept, named in the last line.
         coverage: :func:`coverage_report`; how much of the material was interpreted.
+        n_reasoning: answers that came back with a chain of thought (AP-27). Like the
+            reasons of :data:`ANSWER_OUTCOMES`, the line appears only when there is
+            something to report -- a provider that does not think would otherwise write
+            "0" under every single run.
     """
     lines = [(f"  Deutung: {n_chapters} Kapitel, {n_interpreted} gedeutet, "
               f"{len(lost)} ohne Deutung")]
     if coverage is not None:
         lines += coverage_lines(coverage)
+    if n_reasoning:
+        lines.append(f"    Denkmodus: {n_reasoning} Antwort(en) mit reasoning_content — "
+                     f"der Anbieter hat trotz 'thinking: disabled' gedacht und es als "
+                     f"Ausgabe abgerechnet")
     buckets: dict[str, list[str]] = {}
     for item in lost:
         bucket = _outcome_bucket(item["reason"])
@@ -1657,9 +1687,14 @@ def answer_summary(n_chapters: int, n_interpreted: int, lost: list[dict],
     return lines
 
 
-def answer_feedback(n_chapters: int, n_interpreted: int, lost: list[dict]) -> list[dict]:
+def answer_feedback(n_chapters: int, n_interpreted: int, lost: list[dict],
+                    n_reasoning: int = 0) -> list[dict]:
     """The same numbers machine-readable, as ``pipeline_feedback`` entries of phase
-    ``deutung`` -- one per lost chapter plus one total, so a later run can compare."""
+    ``deutung`` -- one per lost chapter plus one total, so a later run can compare.
+
+    ``n_reasoning`` adds one further entry, and only when it is non-zero: a run against a
+    provider that respects ``thinking: disabled`` writes exactly the entries it wrote
+    before (AP-27)."""
     entries = [{"section_id": item.get("section_id"), "mapping_id": item.get("mapping_id"),
                 "phase": "deutung", "field": "answer", "reason": item["reason"], "count": 1,
                 "finding": (f"no interpretation for this chapter ({item['reason']}); "
@@ -1675,6 +1710,14 @@ def answer_feedback(n_chapters: int, n_interpreted: int, lost: list[dict]) -> li
                     + (f" ({', '.join(f'{k}: {v}' for k, v in sorted(reasons.items()))})"
                        if lost else "")),
     })
+    if n_reasoning:
+        entries.append({
+            "section_id": None, "phase": "deutung", "field": "reasoning",
+            "count": n_reasoning,
+            "finding": (f"{n_reasoning} answer(s) carried a reasoning_content field: the "
+                        "provider thought despite 'thinking: disabled' and billed the "
+                        "chain of thought as output"),
+        })
     return entries
 
 
@@ -1828,13 +1871,15 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     # uncheckable in the 4110 run, and nothing in the output said so.
     feedback += dropped
     # ... and what the run itself lost: which chapters have no interpretation, and why
-    feedback += answer_feedback(len(results), n_llm, lost)
+    # ... including what the provider thought although it was told not to (AP-27)
+    n_reasoning = getattr(answer_source, "n_reasoning", 0)
+    feedback += answer_feedback(len(results), n_llm, lost, n_reasoning)
     # ... and how much of the material carries an interpretation at all (AP-19)
     coverage = coverage_report(results, n_split, n_extra, n_collisions, n_repaired,
                                asset_notes)
     feedback.append(coverage_feedback(coverage))
     for line in answer_summary(len(results), n_llm, lost, out_dir / "llm_prompts",
-                               coverage=coverage):
+                               coverage=coverage, n_reasoning=n_reasoning):
         print(line)
     live = answer_source.live
     out = {"model": model if live else None, "mode": "api" if live else "export",

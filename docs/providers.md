@@ -7,7 +7,7 @@ deterministically and exports the prompts for the chat workflow.
 | Provider | Notes | Key |
 |---|---|---|
 | `anthropic` | default; needs the `anthropic` extra (`--extras anthropic`) | `ANTHROPIC_API_KEY` or a `.api_key` file |
-| `openai` and OpenAI-compatible (`azure`, `google`, `mistral`, `groq`, `openrouter`, …) | via the standard library, no extra package | the provider's API key env var |
+| `openai` and OpenAI-compatible (`azure`, `google`, `mistral`, `groq`, `openrouter`, DeepSeek, …) | via the standard library, no extra package | the provider's API key env var |
 | `ollama` | local server, runs without a key | — |
 | `chat` | no API: prompts are exported for copy-paste into a chat UI; answers are injected back | — |
 
@@ -44,6 +44,29 @@ Any OpenAI-compatible endpoint works the same way — `--provider google|mistral
 or `--provider openai_compatible --base-url https://your-endpoint/v1` for anything else.
 Azure needs `--provider azure_openai --base-url <deployment-url>` (the API version comes from
 `llm_api_version` in the config).
+
+## DeepSeek
+
+DeepSeek speaks the OpenAI format, so it needs no provider of its own:
+
+```bash
+export LLM_API_KEY=sk-...
+normpare compare --old OLD --new NEW --out OUT \
+  --provider openai_compatible --base-url https://api.deepseek.com --model deepseek-v4-flash
+```
+
+`deepseek-v4-flash` **thinks by default** (reasoning effort `high`). normpare therefore
+sends `"thinking": {"type": "disabled"}` with every OpenAI-compatible request: reasoning
+tokens are billed as output, and while thinking is on the provider ignores `temperature`,
+which the pipeline sets to 0 for reproducibility. Extracting structured JSON from a
+prepared diff is not a task that needs a chain of thought.
+
+Should an answer come back with a `reasoning_content` field anyway, the interpretation
+stage counts it and says so in its summary (`Denkmodus: n Antwort(en) …`, and `field:
+"reasoning"` in `pipeline_feedback`) — thinking that costs money should not be invisible.
+
+`--batch` has no effect here: the message-batch API is Anthropic's, and every other
+provider falls back to sequential calls.
 
 ## Ollama (local, free)
 
