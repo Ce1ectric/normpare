@@ -6,6 +6,46 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- **The coverage counts the interpretations that came back, not the changes that were
+  asked about.** `coverage.n_interpreted` was the sum of the change selections the
+  answering prompts were built from. As long as a model answers about every change it is
+  shown the two are the same number; in the 60909 run of 2026-08-22 they were not, and
+  the run reported "1897 of 1897 (100.0 %)" over 77 changes that carry no interpretation
+  at all — no duplicate change index, no collision, simply no answer. Those 77 appear in
+  no component view and in no CSV row.
+  - `n_interpreted` is now counted **after** the merge, over the `change_index` values
+    really present in the chapter answer. An index outside the chapter's range does not
+    count: it points at no change, so no change gains an interpretation from it.
+  - New in `coverage`: `n_unanswered` — changes that lay in front of a model and came
+    back without an interpretation — and `n_changes_total`, every change of the
+    comparison including the chapters the scope leaves out (their changes are all
+    semantically equal). `n_changes` keeps its meaning: what was shown to a prompt.
+  - The console names all three (`Änderungen: 1899, vorgelegt 1897, gedeutet 1820
+    (95,8 %)`) and always writes the `ohne Antwort:` line, with the affected chapters and
+    their counts when it is not zero. The same numbers reach `pipeline_feedback` and the
+    head note of both deliverables; the note is written when something shown came back
+    unanswered, not merely because a purely cosmetic chapter was skipped on purpose.
+  - A `deutung.json` written before this change stays readable and reports what it could
+    report then.
+
+### Changed
+
+- **The field description of `semantic_status` says what axis B means for a change
+  without a counterpart.** The axis says what happens to the *statement*, and a purely
+  added or purely dropped passage has no previous statement that `equivalent`,
+  `clarified`, `extended` or `narrowed` could be read against. The rule now stands where
+  the model reads it: for such a change the axis describes what happens to the **body of
+  statements** of the standard — newly added text is `extended`, text dropped without
+  replacement is `narrowed`, and a recognisable successor or predecessor elsewhere makes
+  it `replaced`. Measured over the three runs of 2026-08-22, `semantic_status` was the
+  only field that went missing, in 16.2 % / 14.2 % / 8.2 % of the interpretations and
+  concentrated on `new` (25.5 %) and `removed` (21.1 %). **No new value on the axis**:
+  axis A already carries `added`/`removed`, and a second place for the same statement is
+  the category error the taxonomy removed. The rule costs 278 characters of schema, 2.4 %
+  to 3.5 % of a median chapter request.
+
 ### Added
 
 - **DeepSeek as an interpretation provider — thinking off, and counted when it happened
