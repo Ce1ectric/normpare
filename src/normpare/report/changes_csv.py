@@ -16,7 +16,12 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from ..stages.deutung import coverage_percent, format_percent
+from ..stages.deutung import (
+    coverage_percent,
+    coverage_total,
+    coverage_unanswered,
+    format_percent,
+)
 from .axes import change_rows
 
 #: The columns, in this order. Axis D is one column (see :data:`COMPONENT_SEPARATOR`),
@@ -50,11 +55,14 @@ def coverage_note(coverage: dict | None) -> str:
 
     First line is the headline: how many of how many, in percent. Everything a reader of
     the spreadsheet needs to know before filtering it into a course outline.
+
+    Written when a change that was shown to a prompt came back without an interpretation
+    (AP-28); see :func:`normpare.report.component_view.coverage_note`.
     """
-    if not coverage or coverage.get("n_interpreted", 0) >= coverage.get("n_changes", 0):
+    if not coverage or coverage_unanswered(coverage) <= 0:
         return ""
-    missing = coverage["n_changes"] - coverage["n_interpreted"]
-    lines = [(f"UNVOLLSTÄNDIG: {coverage['n_interpreted']} von {coverage['n_changes']} "
+    missing = coverage_unanswered(coverage)
+    lines = [(f"UNVOLLSTÄNDIG: {coverage['n_interpreted']} von {coverage_total(coverage)} "
               f"Änderungen sind gedeutet ({format_percent(coverage_percent(coverage))} %)."),
              "",
              (f"Die übrigen {missing} Änderungen sind deterministisch erfasst, aber "

@@ -320,7 +320,7 @@ CHAPTER_SCHEMA_DOC = """{
    {"change_index": <int, index from the change list>,
     "semantic_label": "equivalent|clarified|extended|restricted|new_obligation|removed_obligation|moved|optional|informative|contradictory",
     "obligation": "tightened|relaxed|unchanged",
-    "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction)",
+    "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction). For a change without a counterpart the axis describes what happens to the BODY OF STATEMENTS of the standard: newly added text is extended, text dropped without replacement is narrowed. If a specific successor or predecessor is recognisable elsewhere, answer replaced instead.",
     "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text",
     "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|formula|note|heading|caption|example|none; use 'other:<short label>' if none of them fits. formula for an equation or its symbols; note for a note or an explanatory remark; heading for a heading or the numbering of the outline; caption for the caption or legend of a figure or a table; example for a worked example or a sample calculation. Separation rules: proof_obligation when what changes is whether or to whom something must be proven, procedure when what changes is how (both may apply, then proof_obligation first); documentation for producing, keeping or presenting records with no body accepting them, proof_obligation as soon as a body accepts the proof; definition only for a change in the terms chapter or to a legal definition, with scope behind it if that shifts the scope of application indirectly; reference only when the change is nothing but the reference, otherwise the substantive component first and reference behind it; definition also for a changed designation, spelling or symbol notation of a term, formula only when the equation itself changes and not its name. Recognisable preprocessing artefacts (a torn sentence, formula residue, a corrected typo) belong in pipeline_feedback and not on this axis."],
     "indeterminate_reason": "no_evidence|ambiguous_scope|conflicting_signals|outside_text -- required when semantic_status or normative_direction is indeterminate, '' otherwise",
@@ -1227,6 +1227,25 @@ def chapter_jobs(synopse: dict, o_secs: dict, n_secs: dict, scope: str = "core",
     return jobs
 
 
+def answered_indices(data: dict | None, n_changes: int) -> list[int]:
+    """The change indices this chapter answer actually carries an interpretation for.
+
+    Counted **after** the merge and over the ``change_index`` values that are really
+    there -- not over the selection the prompts were built from (AP-28). The two are
+    equal only as long as a model answers about every change it is shown; in the 60909
+    run of 2026-08-22, 77 of 1897 changes came back without one and the coverage still
+    reported 100 %.
+
+    An index outside ``range(n_changes)`` belongs to no change of this chapter and is
+    dropped here; ``change_index_check`` reports what the model addressed.
+    """
+    if not data:
+        return []
+    return sorted({d.get("change_index") for d in (data.get("interpretations") or [])
+                   if isinstance(d.get("change_index"), int)
+                   and 0 <= d["change_index"] < n_changes})
+
+
 def merge_chapter_answers(blocks: list[tuple[dict | None, list[int]]]
                           ) -> tuple[dict | None, list[int], int]:
     """Fold the answers of one chapter's blocks into one chapter interpretation.
@@ -1237,7 +1256,9 @@ def merge_chapter_answers(blocks: list[tuple[dict | None, list[int]]]
     answered at all.
 
     Returns:
-        ``(interpretation or None, interpreted change indices, collisions)``.
+        ``(interpretation or None, change indices the answering blocks were shown,
+        collisions)``. What of that was answered is :func:`answered_indices` -- the
+        second element says what was *asked*, and asking is not answering.
     """
     merged: dict | None = None
     seen: dict = {}
@@ -1561,21 +1582,30 @@ def truncation_report(notes: list[dict]) -> dict:
 
 def coverage_report(results: list[dict], n_split_chapters: int, n_extra_requests: int,
                     n_collisions: int, n_repaired: int,
-                    asset_notes: list[dict] | None = None) -> dict:
+                    asset_notes: list[dict] | None = None,
+                    n_changes_total: int = 0) -> dict:
     """How much of the compared material actually carries an interpretation.
 
-    A chapter counts what it was *asked* about: before AP-19 that was at most 40 changes
-    per chapter whatever its size, which left 28.5 % of the 4110 run uninterpreted with
-    nothing saying so. ``incomplete`` names every chapter that still has changes without
-    an interpretation, with both numbers.
+    Three quantities, and they are three because they differ (AP-28):
 
-    ``asset_notes`` adds the second kind of loss: material that reached the prompt only
-    in part because a table or an asset block ran into its character budget (AP-20).
+    * ``n_changes_total`` -- every change of the comparison, including the chapters the
+      scope leaves out (all their changes are semantically equal).
+    * ``n_changes`` -- what a prompt was shown. Since AP-19 that is every change of every
+      in-scope chapter; before it, at most 40 per chapter whatever its size.
+    * ``n_interpreted`` -- what came back, counted over the ``change_index`` values that
+      are really in the merged answer. ``n_unanswered`` is the difference: changes that
+      lay in front of a model and got no interpretation.
+
+    ``incomplete`` names every chapter that has changes without an interpretation, with
+    both numbers; ``asset_notes`` adds the second kind of loss: material that reached the
+    prompt only in part because a table or an asset block ran into its character budget
+    (AP-20).
     """
     total = sum(r.get("_changes_total", 0) for r in results)
     done = sum(len(r.get("_changes_interpreted") or []) for r in results)
     return {
-        "n_changes": total, "n_interpreted": done,
+        "n_changes_total": n_changes_total or total,
+        "n_changes": total, "n_interpreted": done, "n_unanswered": total - done,
         "n_split_chapters": n_split_chapters, "n_extra_requests": n_extra_requests,
         "n_collisions": n_collisions, "n_repaired": n_repaired,
         **truncation_report(asset_notes or []),
@@ -1587,9 +1617,28 @@ def coverage_report(results: list[dict], n_split_chapters: int, n_extra_requests
     }
 
 
+def coverage_total(coverage: dict) -> int:
+    """Every change of the comparison, the base the coverage is measured against.
+
+    Falls back to ``n_changes`` for a ``deutung.json`` written before AP-28, which knew
+    only the changes that reached a prompt.
+    """
+    return coverage.get("n_changes_total") or coverage.get("n_changes") or 0
+
+
+def coverage_unanswered(coverage: dict) -> int:
+    """Changes that lay in front of a model and got no interpretation back.
+
+    Derived for an artefact from before AP-28: there ``n_interpreted`` counted the shown
+    changes, so the difference is zero and an old file reports what it reported then.
+    """
+    return coverage.get("n_unanswered",
+                        (coverage.get("n_changes") or 0) - coverage.get("n_interpreted", 0))
+
+
 def coverage_percent(coverage: dict) -> float:
     """Share of interpreted changes in percent; a run without changes is complete."""
-    total = coverage.get("n_changes") or 0
+    total = coverage_total(coverage)
     return 100.0 if not total else coverage.get("n_interpreted", 0) / total * 100
 
 
@@ -1600,9 +1649,23 @@ def format_percent(value: float) -> str:
 
 def coverage_lines(coverage: dict) -> list[str]:
     """The coverage part of the console summary: how much, split how, and what is missing."""
-    lines = [(f"    Änderungen: {coverage['n_changes']}, davon gedeutet "
-              f"{coverage['n_interpreted']} "
+    lines = [(f"    Änderungen: {coverage_total(coverage)}, "
+              f"vorgelegt {coverage['n_changes']}, "
+              f"gedeutet {coverage['n_interpreted']} "
               f"({format_percent(coverage_percent(coverage))} %)")]
+    # ... always, also at zero: how many of the shown changes came back without an
+    # interpretation is the number the old count could not express at all (AP-28)
+    unanswered = coverage_unanswered(coverage)
+    line = f"      ohne Antwort: {unanswered}"
+    if unanswered:
+        names = [f"{c['mapping_id'] or c['section_id']} "
+                 f"({c['n_changes'] - c['n_interpreted']})"
+                 for c in coverage["incomplete"]]
+        shown = ", ".join(names[:SUMMARY_NAMES])
+        if len(names) > SUMMARY_NAMES:
+            shown += f", … (+{len(names) - SUMMARY_NAMES} weitere)"
+        line += f"   {shown}"
+    lines.append(line)
     if coverage["n_split_chapters"]:
         lines.append(f"    Kapitel in Teilanfragen: {coverage['n_split_chapters']} "
                      f"({coverage['n_extra_requests']} Zusatzanfragen)")
@@ -1616,14 +1679,6 @@ def coverage_lines(coverage: dict) -> list[str]:
     if coverage["n_collisions"]:
         lines.append(f"    Index-Kollisionen: {coverage['n_collisions']} "
                      f"(der frühere Block gilt)")
-    if coverage["incomplete"]:
-        names = [f"{c['mapping_id'] or c['section_id']} "
-                 f"({c['n_changes'] - c['n_interpreted']} von {c['n_changes']})"
-                 for c in coverage["incomplete"]]
-        shown = ", ".join(names[:SUMMARY_NAMES])
-        if len(names) > SUMMARY_NAMES:
-            shown += f", … (+{len(names) - SUMMARY_NAMES} weitere)"
-        lines.append(f"    ungedeutet: {shown}")
     return lines
 
 
@@ -1631,9 +1686,12 @@ def coverage_feedback(coverage: dict) -> dict:
     """The coverage as one machine-readable ``pipeline_feedback`` entry of phase
     ``deutung`` -- the same numbers the console prints, for a later comparison."""
     return {"section_id": None, "phase": "deutung", "field": "coverage", **coverage,
-            "count": coverage["n_changes"] - coverage["n_interpreted"],
-            "finding": (f"{coverage['n_interpreted']} of {coverage['n_changes']} changes "
+            "count": coverage_unanswered(coverage),
+            "finding": (f"{coverage['n_interpreted']} of {coverage_total(coverage)} changes "
                         f"were interpreted ({format_percent(coverage_percent(coverage))} %); "
+                        f"{coverage['n_changes']} were shown to a prompt, of which "
+                        f"{coverage_unanswered(coverage)} came back without an "
+                        f"interpretation; "
                         f"{coverage['n_split_chapters']} chapter(s) were split into "
                         f"{coverage['n_extra_requests']} extra request(s), "
                         f"{coverage['n_collisions']} change index collision(s), "
@@ -1768,7 +1826,7 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     n_repaired = 0                 # answers only readable with the lenient parse
     for ch, cid, mid, tags, parts, old_x, new_x in jobs:
         # one chapter, one interpretation -- however many requests it took to get it
-        data, sel, collisions = merge_chapter_answers(
+        data, _sel, collisions = merge_chapter_answers(
             [(answers.get(t), part_sel) for t, (_p, part_sel) in zip(tags, parts)])
         n_collisions += collisions
         n_repaired += sum(1 for t in tags if outcomes.get(t) == OUTCOME_REPAIRED)
@@ -1837,7 +1895,12 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
         data["mapping_id"] = mid
         data["section_id"] = cid
         data["_changes_total"] = len(ch["changes"])
-        data["_changes_interpreted"] = sel if data.get("_source") == "llm" else []
+        # what came back, not what was asked: `sel` is the selection the answering blocks
+        # were built from, and a model may answer about fewer changes than it was shown
+        # (AP-28). Every in-scope change reaches some block, so `_changes_total` is at the
+        # same time the number of changes this chapter presented.
+        data["_changes_interpreted"] = (answered_indices(data, len(ch["changes"]))
+                                        if data.get("_source") == "llm" else [])
         results.append(data)
         for field, n in sorted(drops.items()):
             was = supplied.get(field)
@@ -1875,8 +1938,13 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     n_reasoning = getattr(answer_source, "n_reasoning", 0)
     feedback += answer_feedback(len(results), n_llm, lost, n_reasoning)
     # ... and how much of the material carries an interpretation at all (AP-19)
+    # ... measured against every change of the comparison, the chapters left out of the
+    # scope included: their changes carry no interpretation either, and a base that hides
+    # them would report a completeness the deliverables do not have
     coverage = coverage_report(results, n_split, n_extra, n_collisions, n_repaired,
-                               asset_notes)
+                               asset_notes,
+                               n_changes_total=sum(len(c.get("changes") or [])
+                                                   for c in synopse["chapters"]))
     feedback.append(coverage_feedback(coverage))
     for line in answer_summary(len(results), n_llm, lost, out_dir / "llm_prompts",
                                coverage=coverage, n_reasoning=n_reasoning):

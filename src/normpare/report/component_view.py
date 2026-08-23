@@ -19,6 +19,8 @@ from ..stages.deutung import (
     NORMATIVE_DIRECTIONS,
     OTHER_COMPONENT,
     coverage_percent,
+    coverage_total,
+    coverage_unanswered,
     format_percent,
 )
 from .axes import carries_axes, change_rows
@@ -63,10 +65,15 @@ def coverage_note(coverage: dict | None) -> list[str]:
     Only then: a warning that is always there is not read. Whoever builds a course from
     this view has to know that 714 of 2506 changes are missing from it, and which
     chapters they are missing from.
+
+    The trigger is what a prompt was shown and did not get answered (AP-28) -- the count
+    of interpretations that came back, not of requests that went out. Chapters the scope
+    leaves out are in the total but do not raise the note: their changes are semantically
+    equal, and not interpreting them is a decision of the stage, not a loss.
     """
-    if not coverage or coverage.get("n_interpreted", 0) >= coverage.get("n_changes", 0):
+    if not coverage or coverage_unanswered(coverage) <= 0:
         return []
-    missing = coverage["n_changes"] - coverage["n_interpreted"]
+    missing = coverage_unanswered(coverage)
     names = [f"{c['mapping_id'] or c['section_id']} "
              f"({c['n_changes'] - c['n_interpreted']} von {c['n_changes']})"
              for c in coverage.get("incomplete") or []]
@@ -74,7 +81,7 @@ def coverage_note(coverage: dict | None) -> list[str]:
     if len(names) > INCOMPLETE_NAMES:
         shown += f", … (+{len(names) - INCOMPLETE_NAMES} weitere)"
     return [
-        f"> **Diese Unterlage ist unvollständig.** Von {coverage['n_changes']} "
+        f"> **Diese Unterlage ist unvollständig.** Von {coverage_total(coverage)} "
         f"Änderungen tragen {coverage['n_interpreted']} eine Deutung "
         f"({format_percent(coverage_percent(coverage))} %); {missing} sind "
         "deterministisch erfasst, aber ungedeutet und stehen deshalb in keinem Abschnitt "

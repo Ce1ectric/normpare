@@ -321,11 +321,14 @@ def test_coverage_reaches_the_summary(tmp_path, capsys):
                           outcomes=["ok", "truncated"])
     printed = capsys.readouterr().out
 
-    assert "Änderungen: 45, davon gedeutet 40 (88,9 %)" in printed
+    # AP-28 split the one number into three: all changes, those shown to a prompt, those
+    # that came back with an interpretation. Here the first two coincide -- every change
+    # of this chapter went into one of the two blocks, and the second block never answered
+    assert "Änderungen: 45, vorgelegt 45, gedeutet 40 (88,9 %)" in printed
     assert "Kapitel in Teilanfragen: 1 (1 Zusatzanfragen)" in printed
-    # a chapter that is only half interpreted is named with both numbers
-    assert "11.2" in printed
-    assert "5" in printed
+    # a chapter that is only half interpreted is named with the number it lost
+    assert "ohne Antwort: 5" in printed
+    assert "11.2+11.2 (5)" in printed
     assert out["coverage"]["n_interpreted"] == 40
     assert out["coverage"]["incomplete"] == [
         {"section_id": "11.2", "mapping_id": "11.2+11.2",
