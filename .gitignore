@@ -49,6 +49,7 @@ notizen/
 prompts/
 runs/
 nachtlauf.sh
+deutungslauf_deepseek.sh
 # Arbeitskopie der Deutungsläufe: Laufkopie, ausgeleitete Prompts, Antworten
 arbeit/
 
