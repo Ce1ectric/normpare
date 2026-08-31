@@ -65,6 +65,32 @@ and wording, axis C about strictness — `narrowed` means "covers fewer cases", 
 "stricter". A value outside its vocabulary is discarded and reported, never silently
 corrected, and an axis may abstain with `indeterminate` plus an `indeterminate_reason`.
 
+A move is one event with two change records, one in the old chapter and one in the new
+one, and axis B describes the **text**, not the place: unchanged moved text is
+`equivalent`, text reworded on the way takes the value that describes the rewording, and
+`replaced` stays with a change whose counterpart is not connected by a move.
+
+## The axes against what the pipeline knows
+
+The pipeline knows three things about a change without asking anybody: its structural
+operation, which paragraph a move went to, and whether the changed sentences carry a modal
+verb. Four checks hold the interpretation against them, and all four **mark without
+correcting** — the reported value stays where it is:
+
+- `axis_partner_disagreement` — the two records of one move are joined over the pointer the
+  paragraph aligner left behind and compared on axes B and C. A difference is flagged on
+  **both** sides, with the other side's value. A move whose pointer names only the chapter
+  is not compared.
+- `axis_b_contradicts_a` — `equivalent` for a change that has no counterpart at all.
+- `axis_c_contradicts_modality` — a change with a modal sentence called non-normative. The
+  reverse case (informative text with a direction) is counted only, never flagged: the
+  modality detection is not certain enough there.
+- `successor_named` — a `narrowed` change whose own free text names the section the rule
+  moved to.
+
+The counts reach `pipeline_feedback`; `tools/axis_consistency.py` recomputes all of them
+over one or more finished runs, offline.
+
 ## The evidence guard
 
 Every interpretation the model produces must include a short **verbatim quote** from the old
@@ -80,7 +106,8 @@ the source, and records per entry:
   case is flagged and never corrected.
 
 Anything that fails the check, or that the model itself flagged as contradictory, lands in a
-**review queue** in `deutung.json` with the reason attached.
+**review queue** in `deutung.json` with the reason attached — as do the two axis findings
+`axis_partner_disagreement` and `successor_named` described above.
 
 This turns model quality into something you can measure rather than trust: a strong model
 verifies at well over 90 %, a weak one collapses because it paraphrases instead of quoting.

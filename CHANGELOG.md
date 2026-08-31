@@ -46,8 +46,51 @@ All notable changes to this project are documented here. The format is based on
   the category error the taxonomy removed. The rule costs 278 characters of schema, 2.4 %
   to 3.5 % of a median chapter request.
 
+- **The field description of `semantic_status` says what axis B means for a move.** A
+  move is one event with two change records, and until now the schema said nothing about
+  it: seen from the old place the model reported `replaced`, seen from the new one
+  `equivalent`, and over the three runs of 2026-08-27 the two sides disagreed in 66 % /
+  88 % / 54 % of the pairs the pipeline can join. The rule (Christian, 2026-08-27): axis B
+  describes the **text**, the place is structural. Unchanged moved text is `equivalent`,
+  text reworded on the way takes the value that describes the rewording, and `replaced`
+  stays with a change whose counterpart is not connected by a move record. **No new value
+  and no new axis field**; the rule costs 335 characters of schema, 2.8 % to 4.1 % of a
+  median chapter request. It changes the prompt and with it the cache key, so it takes
+  effect at the next interpretation run.
+
 ### Added
 
+- **Four consistency checks between the interpretation and what the pipeline knows by
+  itself** (`check_consistency`, written into `deutung.json` and reported in
+  `pipeline_feedback`). Every one of them **marks and never corrects**: the reported value
+  stays readable and a flag joins it.
+  - `axis_partner_disagreement` — the two records of one move are joined over
+    `moved_away.moved_to` → `moved_in.new_ids[0]` and compared on axes B and C. The flag
+    is written on **both** sides with the other side's value; which of the two is right is
+    a question for the schema rule, not for the check. A move without that pointer (the
+    block continuation of AP-26 knows the chapter, not the paragraph) is counted as
+    unpaired and never checked.
+  - A pointer that hits a record the comparison does not call `moved_in` is counted and
+    reported (`field: "move_pointer"`, phase `alignment`): the old side says the text
+    moved, the new side reports it as new, and both are counted today. Seven of twenty
+    pointers in the 60909 run of 2026-08-23.
+  - `axis_b_contradicts_a` — `semantic_status: equivalent` for a change that has no
+    counterpart at all (`new` or `removed`): 93 / 49 / 58 interpretations of the three
+    runs, although AP-28 put the rule for exactly that case into the field description.
+  - `axis_c_contradicts_modality` — the changed sentence carries a modal verb and the
+    interpretation calls it non-normative (`not_applicable`): 78 / 88 / 39. The reverse
+    case (informative text with a reported direction, 244 / 285 / 100) is **counted only**
+    and never written on a record: the modality detection is not certain enough there.
+  - `successor_named` — `semantic_status: narrowed` while the interpretation's own free
+    text names the section the rule moved to. Deliberately narrow (7 / 1 / 4 cases, every
+    one of them additionally `relaxed`); the wide form takes in "Die Planung muss nun in
+    enger Abstimmung erfolgen", which is no relocation.
+  - `axis_partner_disagreement` and `successor_named` are new reasons of the review queue,
+    which is extended and not rebuilt.
+- **`tools/axis_consistency.py`** recomputes all four findings over one or more finished
+  runs — offline, no LLM, no network, out of `synopse.json` and `deutung.json` alone, and
+  through the production functions, so tool and pipeline cannot drift apart. `--dir` is
+  repeatable and adds a comparison column per run; the report is written only to `--out`.
 - **DeepSeek as an interpretation provider — thinking off, and counted when it happened
   anyway.** `deepseek-v4-flash` needs no provider of its own: `--provider
   openai_compatible --base-url https://api.deepseek.com --model deepseek-v4-flash` covers
