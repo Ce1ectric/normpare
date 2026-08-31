@@ -1591,11 +1591,11 @@ WITHOUT_COUNTERPART = ("added", "removed")
 #: all -- so the narrow form is the one that writes on a record.
 _SUCCESSOR_NAMED = re.compile(
     r"\b(?:nun|jetzt|nunmehr|k[uü]nftig|zuk[uü]nftig)\s+(?:in|nach)\s+"
-    r"(?:Abschnitt|Kapitel|Anhang)\s+[A-Z]?\.?\d[\d.]*", re.I)
+    r"(?:Abschnitt|Kapitel|Anhang)\s+[A-Z]?\.?\d[\d.]*", re.IGNORECASE)
 
 #: The wide form, measured only and never written on a record (AP-29, finding 4).
 _SUCCESSOR_HINT = re.compile(
-    r"\b(?:nun|jetzt|nunmehr|k[uü]nftig|zuk[uü]nftig)\s+(?:in|nach)\b", re.I)
+    r"\b(?:nun|jetzt|nunmehr|k[uü]nftig|zuk[uü]nftig)\s+(?:in|nach)\b", re.IGNORECASE)
 
 
 def change_modality(change: dict | None) -> str | None:
