@@ -21,25 +21,96 @@ so runs are inspectable and resumable.
 | **ingest** | read old and new document (PDF via table of contents, DOCX via styles) into a common `norm_doc.json` (sections, paragraphs, tables, figures, formulas, provenance) |
 | **enrich** | per paragraph: normalization layers N0–N3, modality per sentence, internal/external references, parameter values (number + unit as a decimal) |
 | **map** | align chapters old ↔ new (id+title, then title/content similarity, incl. split/merge) |
-| **align** | align paragraphs within mapped chapters; detect moved / split / merged |
-| **synopse** | the change diff — syntactic (exact character/token) and semantic (N3) levels, parameter-value changes, modality shifts, table and formula diffs |
+| **align** | align paragraphs within mapped chapters; detect moved, split and merged passages |
+| **synopse** | the change diff — syntactic (exact character/token) and semantic (N3) levels, parameter-value changes, modality shifts, formula diffs, and tables paired over caption or cell content, across chapter boundaries where needed |
 | **keywords** | assign a curated keyword taxonomy per chapter |
-| **deutung** | per-chapter AI interpretation (summaries, per-change meaning and impact) with an evidence guard — optional, skipped with `--no-llm` |
+| **deutung** | per-chapter AI interpretation (summaries, per-change meaning and impact) on four axes, with an evidence guard — optional, skipped with `--no-llm` |
 | **report** | build the deliverables (below) |
+
+## What counts as a change
+
+The paragraph alignment classifies every difference it finds. The `kind` of a change is
+deterministic and is never asked of a model:
+
+| `kind` | meaning |
+|---|---|
+| `new` / `removed` | a passage without a counterpart in the other edition |
+| `similar` | a paired passage whose wording changed |
+| `cosmetic` | a paired passage whose wording changed without changing the statement |
+| `split` / `merged` | one passage became several, or several became one |
+| `moved_in` / `moved_away` | the same passage at a different place — seen from the new and from the old side |
+
+A move is only ever claimed **with evidence**: either the assignment finds the pair above
+the similarity threshold — a stricter one for short passages, where a low bar pairs anything
+— or the passage sits between two other moves into the same new chapter and travels with
+them. A passage the aligner cannot place stays `removed` and, if its text is demonstrably
+still somewhere in the new edition, appears in the review list described below. A third
+route exists only on request: `--embed-fallback` adds an embedding-based rescue, described
+under [Usage](usage.md#alignment-deterministic-default-and-optional-embedding-cascade).
+
+## The four axes
+
+Where a single label would have to carry three statements at once, normpare asks four
+independent questions about each change:
+
+| Axis | Field | Vocabulary |
+|---|---|---|
+| **A** — the structural operation | `structural_operation` | `added`, `removed`, `modified`, `merged`, `split`, `moved`, `unchanged` |
+| **B** — what happens to the statement | `semantic_status` | `equivalent`, `clarified`, `extended`, `narrowed`, `replaced`, `contradictory`, `indeterminate` |
+| **C** — what it means for whoever is bound | `normative_direction` | `tightened`, `relaxed`, `unchanged`, `not_applicable`, `indeterminate` |
+| **D** — which components are touched | `affected_components` | `proof_obligation`, `limit_value`, `procedure`, `deadline`, `responsibility`, `documentation`, `scope`, `definition`, `reference`, `formula`, `note`, `heading`, `caption`, `example`, `none`, or `other:<label>` |
+
+Axis A is **derived from the change itself**, not asked of the model. Axis B is about scope
+and wording, axis C about strictness — `narrowed` means "covers fewer cases", never
+"stricter". A value outside its vocabulary is discarded and reported, never silently
+corrected, and an axis may abstain with `indeterminate` plus an `indeterminate_reason`.
 
 ## The evidence guard
 
 Every interpretation the model produces must include a short **verbatim quote** from the old
 or the new text. After the model answers, normpare checks that this quote actually occurs in
-the source. The result is stored per entry as `evidence_ok`, and anything that fails the
-check — or that the model itself flagged as contradictory — lands in a **review queue** in
-`deutung.json`.
+the source, and records per entry:
+
+- `evidence_ok` — the quote was found (the historical rule; a quote under 15 characters
+  passes only if it is the whole paragraph),
+- `evidence_strict` — the quote was found in full, fragments checked separately,
+- `evidence_match_chars` / `evidence_fragments` — how much of it matched, and in how many
+  pieces,
+- `change_index_disputed` — another change of the same chapter fits the quote better. The
+  case is flagged and never corrected.
+
+Anything that fails the check, or that the model itself flagged as contradictory, lands in a
+**review queue** in `deutung.json` with the reason attached.
 
 This turns model quality into something you can measure rather than trust: a strong model
 verifies at well over 90 %, a weak one collapses because it paraphrases instead of quoting.
 See [LLM providers](providers.md#choosing-a-model-measure-do-not-guess).
 
+## Coverage: what was asked, and what came back
+
+The interpretation stage is the only part that can silently lose material, so it counts
+three separate numbers and prints all of them:
+
+```
+Änderungen: 1899, vorgelegt 1897, gedeutet 1859 (97,9 %)
+  ohne Antwort: 38   Literatur<Literatur (38)
+```
+
+- `n_changes_total` — every change of the comparison,
+- `n_changes` — those a prompt actually asked about,
+- `n_interpreted` — those an answer came back for, counted **after** the answers are merged,
+- `n_unanswered` — asked about, but no interpretation returned. When this is not zero, the
+  affected chapters are named on the console, the component view carries the note inline,
+  and the CSV gets a companion file `Aenderungen_<run>_Abdeckung.txt` beside it — a warning
+  cannot go *into* a CSV without breaking it. A later complete run deletes that file again,
+  so a stale warning cannot survive in the directory.
+
+A chapter with more changes than fit into one request is split into numbered part requests;
+`n_split_chapters` and `n_extra_requests` record how often.
+
 ## Outputs (in the target directory)
+
+**Documents**
 
 - `annotiert_<run>.html` — the new version with colour-marked changes, chapter summaries,
   cell-diffed tables and embedded figures.
@@ -47,7 +118,51 @@ See [LLM providers](providers.md#choosing-a-model-measure-do-not-guess).
 - `Synopse_final_<run>.docx` — the AI-interpreted, human-readable per-chapter synopsis that
   bundles several change lines into one entry (only with an AI run).
 - `Aenderungen_<run>.pptx` — a training slide draft of the key changes.
-- `synopse.json`, `chapters.json`, `statistics.json`, `keywords.json`, `mapping.json` —
-  machine-readable intermediates.
+
+**Working lists**
+
+- `Aenderungen_<run>.csv` — one row **per interpretation**, with its four axes, for a
+  spreadsheet (UTF-8 with BOM, semicolon-separated, so a double click in a German Excel
+  keeps its umlauts and columns). A change without an interpretation has no row here, which
+  is what the companion `_Abdeckung.txt` warns about; a deterministic run leaves the file
+  with its header only.
+- `Aenderungen_nach_Komponente_<run>.md` — the same material grouped by affected component,
+  for a reader.
+- `Pruefliste_entfallen_<run>.md` — passages reported as removed whose text is demonstrably
+  still in the new edition, with the reason: found outside the mapped sections, missed
+  inside them, an unbalanced mapping, or a move the check could not confirm. The list
+  **marks, it does not filter**: nothing is removed from the change stream.
+
+**Machine-readable**
+
+- `synopse.json`, `chapters.json`, `statistics.json`, `keywords.json`, `mapping.json`,
+  `review_removed.json`, and `deutung.json` when an interpretation ran.
+- `manifest.json` — inputs with their SHA-256, the stages that ran, and every parameter of
+  the run.
+- `pipeline_feedback.md` — what the interpretation noticed: axis violations, truncated
+  answers, unanswered changes, and what the model reported back about the extraction.
+  Written by the interpretation stage, so an AI run only.
 - `alt/` and `neu/` — the per-version `norm_doc.json` plus `assets/` (images, and each table
   as a CSV under `assets/tables/`).
+
+**Caches**, safe to delete and cheap to rebuild: `llm_cache/` (one file per model and
+prompt, so a repeat run never pays twice for a chapter already interpreted) and
+`.vec_cache.npz` (encoded vectors of the embedding pass).
+
+`llm_prompts/` is **not** a cache and should not be deleted unthinkingly. It holds the
+exported prompts whenever the run cannot ask a model itself — no API key, no base URL, or
+provider `chat` — and in a live run it is where a failed request lands as
+`<chapter>.FAILED.txt`, prompt and raw answer together. That file is the only copy of what
+went wrong, and the console and `pipeline_feedback.md` point at it by name.
+
+## Known limits
+
+- **Parameter values are read from paragraph text only.** A limit value that lives in a
+  table cell does not appear in `statistics.json → kennwert_changes`. With an AI run, table
+  values are reported separately under `chapters[].tables[].value_changes` in `deutung.json`.
+- **The `figures` count is not a count of figures.** For a PDF it counts placed image
+  objects, so one drawing assembled from many pieces counts many times; for a DOCX it counts
+  embedded drawings. The two are not comparable with each other. Figures are extracted as
+  image files from DOCX only.
+- **Modality is read from the sentences a change touches.** A requirement stated without a
+  modal verb — a list item under a `muss` stem, for instance — can be missed.

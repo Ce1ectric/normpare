@@ -21,7 +21,10 @@ really exists — so every claim is traceable back to the text.
 - two **Word synopses** — a deterministic tabular one, and (with AI) a readable one that
   bundles related changes into a single entry per topic;
 - a **PowerPoint** draft of the key changes, machine-readable **JSON** per stage, **tables as
-  CSV**, figures as image assets.
+  CSV**, and figures as image files when the source is a DOCX;
+- working lists to check the result against: every interpreted change as a **CSV row** with
+  its four interpretation axes, the same material **grouped by affected component**, and a
+  **review list** of passages reported as removed whose text is still in the new edition.
 
 ## Start here
 
