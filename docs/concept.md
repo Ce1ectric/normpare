@@ -48,6 +48,14 @@ still somewhere in the new edition, appears in the review list described below. 
 route exists only on request: `--embed-fallback` adds an embedding-based rescue, described
 under [Usage](usage.md#alignment-deterministic-default-and-optional-embedding-cascade).
 
+A move is **one** event with **two** change records, and both are always written — also
+when one side sits in a chapter that has no counterpart at all, where the passage would
+otherwise be reported a second time as an addition or a deletion, so that one change is
+counted twice. The pointer between the two records is evidence or it is not written: where
+a move has no target record, the change names the target *chapter* (`moved_to_chapter`)
+instead of the target paragraph, the same way a passage that travelled inside a block
+does.
+
 ## The four axes
 
 Where a single label would have to carry three statements at once, normpare asks four
@@ -87,6 +95,10 @@ correcting** — the reported value stays where it is:
   modality detection is not certain enough there.
 - `successor_named` — a `narrowed` change whose own free text names the section the rule
   moved to.
+
+Two guards of the deterministic stage sit next to them and must read zero: a `moved_away`
+pointing at a paragraph nobody reports as `moved_in`, and a `moved_in` naming a source
+nobody reports as `moved_away`. Either one means one event counted twice.
 
 The counts reach `pipeline_feedback`; `tools/axis_consistency.py` recomputes all of them
 over one or more finished runs, offline.

@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **Both sides of a move are written down, also into and out of a chapter that has no
+  counterpart.** A chapter mapping record of type `new` or `removed` got no `para_links`
+  at all, so its paragraphs entered the document-wide move pass through a second route
+  without a link index — and whichever side of a move sat in such a chapter lost its
+  change record. One event was then counted twice: the old side said "moved to X" while
+  the new side reported X as an addition (21 such dead pointers over five finished runs,
+  every single one of them into a chapter of type `new`), or the mirror of it, or — where
+  both sides were unmapped — the move was written in `mapping.json` and in no change
+  record at all.
+  - Records without a counterpart now carry `para_links`, one link per paragraph. The
+    candidate order of the move pass is unchanged (mapped chapters first, in record
+    order), and so is the pairing: the `moved` list is identical element for element over
+    five replays, including 439 moves on a DOCX-to-DOCX 4110 run.
+  - A pointer is evidence or it is not written: without a target record a move names the
+    target *chapter* (`moved_to_chapter`), the treatment a block continuation gets.
+  - The synopsis reports a moved paragraph of such a chapter as the move it is instead of
+    a second time as an addition or a deletion. The number of change records is unchanged;
+    their `kind` is not.
+  - `move_pairs` additionally reports `orphans` — a `moved_in` whose source nobody calls
+    `moved_away` — and `pipeline_feedback` carries both guards, `move_pointer` and
+    `move_pointer_orphan`. Both must read zero.
+  - Measured on two corpora: dead pointers 12 → 0 and 3 → 0, orphaned `moved_in` 4 → 0,
+    moves without any record 8 → 0 and 6 → 0.
+
 - **The coverage counts the interpretations that came back, not the changes that were
   asked about.** `coverage.n_interpreted` was the sum of the change selections the
   answering prompts were built from. As long as a model answers about every change it is

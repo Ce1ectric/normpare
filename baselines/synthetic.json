@@ -34,6 +34,14 @@
   }
  },
  "created": "2026-08-21T09:32:11Z",
+ "known_deviations": {
+  "mapping.json": {
+   "aufgenommen": "2026-08-31",
+   "belegt_durch": "runs/AP-30_2026-08-31/harness_synthetic_diff.txt, runs/AP-30_2026-08-31/harness_synthetic.txt, runs/AP-30_2026-08-31/BERICHT.md",
+   "expected_sha256": "38d126044f772d95c03c358f01db127a513cc2a74f9dc67dede690237fc7dde7",
+   "grund": "AP-30: a chapter without a counterpart now carries para_links, so both sides of a move can be written. The two records of the synthetic corpus with match_type removed (11) and new (10) each gain one link (kind removed / new); the JSON path diff shows .records[13].para_links and .records[14].para_links as the only additions, 'moved' stays empty and every other artifact is byte-identical."
+  }
+ },
  "name": "synthetic",
  "normpare_version": "0.1.1",
  "reference_dir": "runs/AP-26_2026-08-21/synthetik/run",
