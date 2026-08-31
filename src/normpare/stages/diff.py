@@ -635,13 +635,34 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
               "paragraph_balance": balance,
               "changes": [], "n_identical": 0}
 
+        # AP-30: a chapter without a counterpart reports its paragraphs one by one, as it
+        # always did -- except where the document-wide pass moved one of them. Since the
+        # record now carries para_links, that verdict is available here, and the paragraph
+        # is reported as the move it is instead of a second time as an addition.
+        link_of = {pid: l for l in rec.get("para_links") or []
+                   for pid in (l["new_ids"] if mt == "new" else l["old_ids"])}
         if mt == "new":
             for p in n_secs.get(rec["new_id"], {"paragraphs": []})["paragraphs"]:
                 if (p.get("n1") or p.get("n0", "")).strip() and p.get("kind") != "formula":
+                    l = link_of.get(p["id"]) or {}
+                    if l.get("kind") == "moved_in":
+                        ch["changes"].append(
+                            _para_change("moved_in", [], [p], l.get("confidence", 0.0),
+                                         {"moved_from": l.get("moved_from")}))
+                        continue
                     ch["changes"].append(_para_change("new", [], [p], 0.0))
         elif mt == "removed":
             for p in o_secs.get(rec["old_id"], {"paragraphs": []})["paragraphs"]:
                 if (p.get("n1") or p.get("n0", "")).strip() and p.get("kind") != "formula":
+                    l = link_of.get(p["id"]) or {}
+                    if l.get("kind") == "moved_away":
+                        extra = {"moved_to": l.get("moved_to")}
+                        if l.get("moved_to_chapter"):
+                            extra["moved_to_chapter"] = l["moved_to_chapter"]
+                        ch["changes"].append(
+                            _para_change("moved_away", [p], [], l.get("confidence", 0.0),
+                                         extra))
+                        continue
                     if _is_non_normative([p], ch["title"]):
                         ch["n_non_normative"] = ch.get("n_non_normative", 0) + 1
                         continue

@@ -275,9 +275,11 @@ def align_document(old_doc, new_doc, mapping_records, sim_backend,
     tau_eff = tau - 0.05 if pdf_involved else tau
 
     for rec in mapping_records:
-        mt = rec["match_type"]
-        if mt in ("removed", "new"):
-            continue
+        # AP-30: a chapter without a counterpart gets para_links as well. Its side is
+        # empty, so align_chapter yields exactly one "new" (or "removed") link per
+        # paragraph -- a sentence index the move pass can address. Without it the
+        # paragraphs entered the pass through a second route and the side sitting in such
+        # a chapter lost its record: the move was written once, counted twice.
         old_ids = rec.get("old_ids") or ([rec["old_id"]] if rec.get("old_id") else [])
         new_ids = rec.get("new_ids") or ([rec["new_id"]] if rec.get("new_id") else [])
         olds, news = [], []
@@ -297,42 +299,38 @@ def align_document(old_doc, new_doc, mapping_records, sim_backend,
 
     # ---- 4) moved: document-wide post-pass ---------------------------------------
     tau_short = TAU_MOVED_SHORT if tau_moved_short is None else tau_moved_short
-    all_new, all_removed = [], []          # (rec_idx, link_idx, para_dict, sec_id)
     o_par_by_id = {p["id"]: p for s in old_doc["sections"] for p in s["paragraphs"]}
     n_par_by_id = {p["id"]: p for s in new_doc["sections"] for p in s["paragraphs"]}
-    for ri, rec in enumerate(mapping_records):
-        for li, l in enumerate(rec.get("para_links", [])):
+    chapter_of_new = {p["id"]: s["id"] for s in new_doc["sections"] for p in s["paragraphs"]}
+    # The candidate order decides the matrix and with it the assignment, so it is kept
+    # exactly as it was: the links of the mapped chapters first, in record order, the
+    # chapters without a counterpart behind them (AP-30 -- they used to enter here as
+    # extra_new / extra_removed, appended to the end of both lists).
+    all_new, all_removed = [], []          # (link, paragraph), mapped chapters
+    extra_new, extra_removed = [], []      # ... and chapters without a counterpart
+    for rec in mapping_records:
+        unmapped = rec["match_type"] in ("new", "removed")
+        for l in rec.get("para_links", []):
             if l["kind"] == "new" and l["new_ids"]:
                 p = n_par_by_id[l["new_ids"][0]]
                 if len(_txt(p)) >= MOVED_MIN_LEN:
-                    all_new.append((ri, li, p))
+                    (extra_new if unmapped else all_new).append((l, p))
             elif l["kind"] == "removed" and l["old_ids"]:
                 p = o_par_by_id[l["old_ids"][0]]
                 if len(_txt(p)) >= MOVED_MIN_LEN:
-                    all_removed.append((ri, li, p))
-    # include entirely new / removed chapters
-    extra_new, extra_removed = [], []
-    for rec in mapping_records:
-        if rec["match_type"] == "new":
-            for p in _paras(n_secs.get(rec["new_id"], {"paragraphs": []})):
-                if len(_txt(p)) >= MOVED_MIN_LEN:
-                    extra_new.append((rec["new_id"], p))
-        elif rec["match_type"] == "removed":
-            for p in _paras(o_secs.get(rec["old_id"], {"paragraphs": []})):
-                if len(_txt(p)) >= MOVED_MIN_LEN:
-                    extra_removed.append((rec["old_id"], p))
+                    (extra_removed if unmapped else all_removed).append((l, p))
 
     moved = []
-    rem_list = all_removed + [(None, None, p) for _, p in extra_removed]
-    new_list = all_new + [(None, None, p) for _, p in extra_new]
+    rem_list = all_removed + extra_removed
+    new_list = all_new + extra_new
     if rem_list and new_list:
-        sim = sim_backend.sim_matrix([_txt(p) for _, _, p in rem_list],
-                                     [_txt(p) for _, _, p in new_list])
+        sim = sim_backend.sim_matrix([_txt(p) for _, p in rem_list],
+                                     [_txt(p) for _, p in new_list])
         ri_, cj_ = _lsa(-sim)
         for a, b in zip(ri_, cj_):
             s = float(sim[a, b])
-            r_ri, r_li, r_p = rem_list[a]
-            n_ri, n_li, n_p = new_list[b]
+            r_link, r_p = rem_list[a]
+            n_link, n_p = new_list[b]
             # a pair of short paragraphs needs more than tau_moved: a handful of technical
             # words is similar to some other handful by chance, and a wrong move is worse
             # than a missing one -- it claims a requirement still exists
@@ -341,20 +339,41 @@ def align_document(old_doc, new_doc, mapping_records, sim_backend,
                 continue
             moved.append({"old_id": r_p["id"], "new_id": n_p["id"],
                           "confidence": round(s, 3), "via": "tfidf"})
-            if r_ri is not None:
-                mapping_records[r_ri]["para_links"][r_li]["kind"] = "moved_away"
-                mapping_records[r_ri]["para_links"][r_li]["moved_to"] = n_p["id"]
-                mapping_records[r_ri]["para_links"][r_li]["confidence"] = round(s, 3)
-                mapping_records[r_ri]["para_links"][r_li]["via"] = "tfidf"
-            if n_ri is not None:
-                mapping_records[n_ri]["para_links"][n_li]["kind"] = "moved_in"
-                mapping_records[n_ri]["para_links"][n_li]["moved_from"] = r_p["id"]
-                mapping_records[n_ri]["para_links"][n_li]["confidence"] = round(s, 3)
-                mapping_records[n_ri]["para_links"][n_li]["via"] = "tfidf"
+            _write_move(r_link, n_link, r_p, n_p, s, "tfidf", chapter_of_new)
 
     # ---- 5) block continuation: a removal wedged between two moves ----------------
     moved += block_continuation_pass(old_doc, new_doc, mapping_records)
     return moved
+
+
+def _write_move(away: dict | None, into: dict | None, old_para: dict, new_para: dict,
+                score: float, via: str, chapter_of_new: dict) -> None:
+    """Write the two records of one move -- both sides, or as much as is proven.
+
+    A move is one event with two change records, and before AP-30 it was written by two
+    guards that could each fail on their own: whichever side sat in a chapter without a
+    counterpart had no link to write on, so the event was reported once and counted twice
+    (once as a move, once as an addition or a deletion).
+
+    ``away`` or ``into`` may still be ``None``, and then the missing side is simply not
+    written. What must not happen is a pointer without a record behind it: if there is no
+    target record, ``moved_to`` stays unwritten and only ``moved_to_chapter`` is set -- the
+    same treatment the block continuation of AP-26 gets, and for the same reason. A pointer
+    into nothing is worse than no pointer.
+    """
+    if away is not None:
+        away["kind"] = "moved_away"
+        if into is not None:
+            away["moved_to"] = new_para["id"]
+        else:
+            away["moved_to_chapter"] = chapter_of_new.get(new_para["id"])
+        away["confidence"] = round(score, 3)
+        away["via"] = via
+    if into is not None:
+        into["kind"] = "moved_in"
+        into["moved_from"] = old_para["id"]
+        into["confidence"] = round(score, 3)
+        into["via"] = via
 
 
 def _chapter_of(link: dict, chapter_of_new: dict) -> str | None:
@@ -397,6 +416,13 @@ def block_continuation_pass(old_doc, new_doc, mapping_records) -> list[dict]:
     for rec in mapping_records:
         links = rec.get("para_links") or []
         if not links:
+            continue
+        # AP-30: chapters without a counterpart now carry links too, and this pass stays
+        # out of them. Its argument is that a chapter moved in parts while the rest of it
+        # stayed -- a chapter that has no counterpart at all did not move in parts, and
+        # widening the rule here would change which paragraphs count as moved. That is a
+        # question of its own, not of the writing step.
+        if rec["match_type"] in ("new", "removed"):
             continue
         link_of_old = {oid: l for l in links for oid in l["old_ids"]}
         old_ids = rec.get("old_ids") or ([rec["old_id"]] if rec.get("old_id") else [])
@@ -520,6 +546,11 @@ def embed_move_pass(old_doc, new_doc, mapping_records, embed_backend,
 
     rem, new = [], []                       # (record, link, paragraph), document order
     for rec in mapping_records:
+        # AP-30: same boundary as the block pass -- the links of a chapter without a
+        # counterpart are new, and taking them in here would change which paragraphs count
+        # as moved, not merely how a move is written down.
+        if rec["match_type"] in ("new", "removed"):
+            continue
         for l in rec.get("para_links") or []:
             if l["kind"] == "removed" and l["old_ids"]:
                 p = o_par.get(l["old_ids"][0])

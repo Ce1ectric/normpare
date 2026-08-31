@@ -1649,16 +1649,33 @@ def move_pairs(synopse: dict) -> dict:
       Seven times in the 60909 run the old side says "moved to X" while the new side
       calls X ``new``, and both are counted today. That is a finding of the
       deterministic stage, so it is reported rather than skipped.
+    * ``orphans`` -- the mirror image (AP-30): a ``moved_in`` whose source is not reported
+      as ``moved_away``. The new side says the text came from X, the old side says X is
+      gone, and again one event is counted twice.
+
+    Since AP-30 both defects must be zero, and both stay here as guards: a chapter without
+    a counterpart gets ``para_links`` now, so neither side of a move can lose its record.
     """
     holders: dict[str, list[tuple[str, int, str]]] = {}
+    sources: dict[str, list[tuple[str, int, str]]] = {}
     for ch in synopse.get("chapters") or []:
         for i, rec in enumerate(ch.get("changes") or []):
             for new_id in (rec.get("new_ids") or []):
                 holders.setdefault(new_id, []).append(
                     (ch.get("mapping_id"), i, rec.get("kind")))
-    pairs, unpaired, dangling = [], [], []
+            for old_id in (rec.get("old_ids") or []):
+                sources.setdefault(old_id, []).append(
+                    (ch.get("mapping_id"), i, rec.get("kind")))
+    pairs, unpaired, dangling, orphans = [], [], [], []
     for ch in synopse.get("chapters") or []:
         for i, rec in enumerate(ch.get("changes") or []):
+            if rec.get("kind") == "moved_in":
+                src = rec.get("moved_from")
+                if src and not any(kind == "moved_away"
+                                   for _m, _j, kind in sources.get(src, [])):
+                    orphans.append({"mapping_id": ch.get("mapping_id"),
+                                    "change_index": i, "moved_from": src,
+                                    "kinds": [k for _m, _j, k in sources.get(src, [])]})
             if rec.get("kind") != "moved_away":
                 continue
             here = {"mapping_id": ch.get("mapping_id"), "change_index": i}
@@ -1676,7 +1693,8 @@ def move_pairs(synopse: dict) -> dict:
             else:
                 dangling.append({**here, "moved_to": target,
                                  "kinds": [k for _m, _j, k in holders.get(target, [])]})
-    return {"pairs": pairs, "unpaired": unpaired, "dangling": dangling}
+    return {"pairs": pairs, "unpaired": unpaired, "dangling": dangling,
+            "orphans": orphans}
 
 
 def _interpretation_index(chapters: list[dict]) -> dict:
@@ -1761,6 +1779,7 @@ def check_consistency(chapters: list[dict], synopse: dict) -> dict:
         "n_pairs": len(joined["pairs"]), "n_pairs_interpreted": n_pairs_interpreted,
         "n_unpaired": len(joined["unpaired"]), "n_dangling": len(joined["dangling"]),
         "dangling": joined["dangling"],
+        "n_orphan": len(joined["orphans"]), "orphans": joined["orphans"],
         "n_partner_disagreement": n_partner,
         "by_axis": {a: by_axis[a] for a in PARTNER_AXES},
         "n_axis_b_contradicts_a": n_b,
@@ -1773,7 +1792,7 @@ def check_consistency(chapters: list[dict], synopse: dict) -> dict:
 
 
 def consistency_feedback(report: dict) -> list[dict]:
-    """The six numbers of :func:`check_consistency` as ``pipeline_feedback`` entries.
+    """The numbers of :func:`check_consistency` as ``pipeline_feedback`` entries.
 
     Written at zero as well. A number that only appears when it is bad leaves the good
     case unmeasured, which is how the silent table cap of AP-20 survived two production
@@ -1795,6 +1814,15 @@ def consistency_feedback(report: dict) -> list[dict]:
          "finding": (f"{r['n_dangling']} moved_away record(s) point at a paragraph the "
                      f"comparison does not report as moved_in; the old side says the "
                      f"text moved, the new side reports it as new, and both are counted")},
+        # AP-30: the mirror of the line above. Both must read zero since a chapter without
+        # a counterpart carries para_links; they stay as guards, and a number that only
+        # appears when it is bad leaves the good case unmeasured.
+        {"section_id": None, "phase": "alignment", "field": "move_pointer_orphan",
+         "count": r.get("n_orphan", 0), "orphans": r.get("orphans", []),
+         "finding": (f"{r.get('n_orphan', 0)} moved_in record(s) name a source the "
+                     f"comparison does not report as moved_away; the new side says the "
+                     f"text came from there, the old side reports it as gone, and both "
+                     f"are counted")},
         {"section_id": None, "phase": "deutung", "field": "axis_b_contradicts_a",
          "count": r["n_axis_b_contradicts_a"],
          "finding": (f"{r['n_axis_b_contradicts_a']} interpretation(s) answer "

@@ -190,7 +190,8 @@ def render(run: dict) -> str:
           _line("joined over the pointer", r["n_pairs"]),
           _line("both sides interpreted", r["n_pairs_interpreted"]),
           _line("no pointer, not checked", r["n_unpaired"]),
-          _line("pointer into a non-move (1a)", r["n_dangling"])]
+          _line("pointer into a non-move (1a)", r["n_dangling"]),
+          _line("moved_in without its source (AP-30)", r.get("n_orphan", 0))]
     for d in r["dangling"]:
         L.append(f"        {d['mapping_id']} #{d['change_index']} -> {d['moved_to']} "
                  f"({', '.join(d['kinds']) or 'nothing'})")
@@ -283,7 +284,9 @@ def render_comparison(runs: list[dict]) -> str:
           _row("no pointer, not checked",
                cells(lambda r: r["report"]["n_unpaired"]), indent="      "),
           _row("pointer into a non-move (1a)",
-               cells(lambda r: r["report"]["n_dangling"]), indent="      ")]
+               cells(lambda r: r["report"]["n_dangling"]), indent="      "),
+          _row("moved_in without its source (AP-30)",
+               cells(lambda r: r["report"].get("n_orphan", 0)), indent="      ")]
     for axis in PARTNER_AXES:
         L += [_row(f"{axis} disagrees",
                    cells(lambda r, a=axis: f"{r['report']['by_axis'][a]} = "

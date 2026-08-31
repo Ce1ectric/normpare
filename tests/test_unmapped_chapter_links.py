@@ -22,9 +22,8 @@ import pytest
 
 from normpare.stages.align import paras as paras_mod
 from normpare.stages.align.paras import align_document
-from normpare.stages.deutung import move_pairs
+from normpare.stages.deutung import check_consistency, consistency_feedback, move_pairs
 from normpare.stages.diff import build_synopse
-
 
 # --- solver, backend and mini documents -------------------------------------------
 
@@ -301,4 +300,36 @@ def test_an_older_mapping_stays_readable(tmp_path):
 
     kinds = [c["kind"] for ch in synopse["chapters"] for c in ch["changes"]]
     assert kinds == ["removed", "new"]
-    assert move_pairs(synopse) == {"pairs": [], "unpaired": [], "dangling": []}
+    assert move_pairs(synopse) == {"pairs": [], "unpaired": [], "dangling": [],
+                                   "orphans": []}
+
+
+# --- part C: the AP-29 check stays, and names the mirror case ----------------------
+
+def _synopse_with_an_orphan() -> dict:
+    """A ``moved_in`` whose source is reported as a deletion -- the mirror of the dead
+    pointer, and the shape the runs showed four times each at 60909."""
+    return {"chapters": [
+        {"mapping_id": "Z<", "changes": [
+            {"kind": "removed", "old_ids": ["Z.p10"], "new_ids": []}]},
+        {"mapping_id": "L<L", "changes": [
+            {"kind": "moved_in", "old_ids": [], "new_ids": ["L.p30"],
+             "moved_from": "Z.p10"}]}]}
+
+
+def test_move_pairs_reports_an_orphaned_moved_in():
+    joined = move_pairs(_synopse_with_an_orphan())
+
+    assert joined["pairs"] == [] and joined["dangling"] == []
+    assert joined["orphans"] == [{"mapping_id": "L<L", "change_index": 0,
+                                  "moved_from": "Z.p10", "kinds": ["removed"]}]
+
+
+def test_the_feedback_names_both_halves_of_a_lost_move():
+    report = check_consistency([], _synopse_with_an_orphan())
+    lines = {fb["field"]: fb for fb in consistency_feedback(report)}
+
+    assert report["n_dangling"] == 0 and report["n_orphan"] == 1
+    assert lines["move_pointer"]["count"] == 0
+    assert lines["move_pointer_orphan"]["count"] == 1
+    assert lines["move_pointer_orphan"]["phase"] == "alignment"
