@@ -320,7 +320,7 @@ CHAPTER_SCHEMA_DOC = """{
    {"change_index": <int, index from the change list>,
     "semantic_label": "equivalent|clarified|extended|restricted|new_obligation|removed_obligation|moved|optional|informative|contradictory",
     "obligation": "tightened|relaxed|unchanged",
-    "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction). For a change without a counterpart the axis describes what happens to the BODY OF STATEMENTS of the standard: newly added text is extended, text dropped without replacement is narrowed. If a specific successor or predecessor is recognisable elsewhere, answer replaced instead.",
+    "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction). For a change without a counterpart the axis describes what happens to the BODY OF STATEMENTS of the standard: newly added text is extended, text dropped without replacement is narrowed. If a specific successor or predecessor is recognisable elsewhere, answer replaced instead. A moved change is the same statement in a new place: the axis describes the TEXT, never the place (the place is structural). Unchanged moved text is equivalent; text reworded on the way takes the value that describes the rewording (clarified|extended|narrowed). Keep replaced for a change whose counterpart is not connected by a move.",
     "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text",
     "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|formula|note|heading|caption|example|none; use 'other:<short label>' if none of them fits. formula for an equation or its symbols; note for a note or an explanatory remark; heading for a heading or the numbering of the outline; caption for the caption or legend of a figure or a table; example for a worked example or a sample calculation. Separation rules: proof_obligation when what changes is whether or to whom something must be proven, procedure when what changes is how (both may apply, then proof_obligation first); documentation for producing, keeping or presenting records with no body accepting them, proof_obligation as soon as a body accepts the proof; definition only for a change in the terms chapter or to a legal definition, with scope behind it if that shifts the scope of application indirectly; reference only when the change is nothing but the reference, otherwise the substantive component first and reference behind it; definition also for a changed designation, spelling or symbol notation of a term, formula only when the equation itself changes and not its name. Recognisable preprocessing artefacts (a torn sentence, formula residue, a corrected typo) belong in pipeline_feedback and not on this axis."],
     "indeterminate_reason": "no_evidence|ambiguous_scope|conflicting_signals|outside_text -- required when semantic_status or normative_direction is indeterminate, '' otherwise",
@@ -1486,8 +1486,9 @@ def check_evidence(deutung: dict, ch: dict) -> dict:
 
 #: Why an interpretation is in the review queue, in a fixed order. The first two are the
 #: historical triggers and keep their meaning exactly (ENT-18); ``change_index_disputed``
-#: is added by AP-07. The queue is extended, not rebuilt.
-REVIEW_REASONS = ("contradiction_flag", "evidence_ok", "change_index_disputed")
+#: is added by AP-07, the last two by AP-29. The queue is extended, not rebuilt.
+REVIEW_REASONS = ("contradiction_flag", "evidence_ok", "change_index_disputed",
+                  "axis_partner_disagreement", "successor_named")
 
 
 def _review_reasons(deutung: dict) -> list[str]:
@@ -1546,6 +1547,277 @@ def _evidence_ok(ev: str, hay: str) -> bool:
         return bool(hay.strip()) and ev == hay.strip()
     probe = ev[:60]
     return probe[:15] in hay or ev in hay
+
+
+# ------------------------------------------------------------------ axes against the facts
+# AP-29. The pipeline knows three things about a change without asking anybody: which
+# structural operation it is (axis A), which paragraph a move went to, and whether the
+# changed sentences carry a modal verb. Measured over the three runs of 2026-08-27, the
+# interpretation contradicts all three often enough to be a class of error rather than a
+# handful of cases:
+#
+# * the two records of ONE move are interpreted differently in 66 % / 88 % / 54 % of the
+#   pairs, and almost always with the same signature -- ``replaced`` seen from the old
+#   place, ``equivalent`` seen from the new one;
+# * 93 / 49 / 58 interpretations call a change ``equivalent`` that has no counterpart at
+#   all (a pure addition or a pure deletion);
+# * 78 / 88 / 39 changes carry a modal sentence and are declared non-normative;
+# * 12 interpretations report a deletion while their own free text names where the rule
+#   now lives.
+#
+# Every check MARKS, none corrects: the reported value stays readable and a flag joins it
+# (the AP-07 pattern of ``change_index_disputed``, not the AP-14 one of discarding a value
+# outside its vocabulary). Whoever corrects here measures the correction instead of the
+# model. What the first finding needed was not a correction but a rule, and that rule is
+# in the field description of ``semantic_status``.
+
+#: Modality labels that carry a duty. ``informativ`` is the fifth value and the only one
+#: outside; see :data:`~normpare.stages.enrich.modality.RANK`.
+MODAL_LABELS = frozenset({"muss", "darf", "darf_nicht", "sollte", "kann"})
+
+#: The axes compared between the two sides of one move. Axis A is equal by construction
+#: (both sides map to ``moved``) and axis D is a list whose order carries meaning, so a
+#: difference there is not a contradiction.
+PARTNER_AXES = ("semantic_status", "normative_direction")
+
+#: Axis A of a change that has no counterpart -- there is no earlier statement anything
+#: could be ``equivalent`` to.
+WITHOUT_COUNTERPART = ("added", "removed")
+
+#: The narrow successor recogniser: a "now" followed straight away by a named place of
+#: the outline. Measured over the three runs it finds 7 / 1 / 4 cases, every one of them
+#: a real relocation. The wide form (:data:`_SUCCESSOR_HINT`) drops the place and takes
+#: in "Die Planung muss **nun in** enger Abstimmung erfolgen", which is no relocation at
+#: all -- so the narrow form is the one that writes on a record.
+_SUCCESSOR_NAMED = re.compile(
+    r"\b(?:nun|jetzt|nunmehr|k[uü]nftig|zuk[uü]nftig)\s+(?:in|nach)\s+"
+    r"(?:Abschnitt|Kapitel|Anhang)\s+[A-Z]?\.?\d[\d.]*", re.I)
+
+#: The wide form, measured only and never written on a record (AP-29, finding 4).
+_SUCCESSOR_HINT = re.compile(
+    r"\b(?:nun|jetzt|nunmehr|k[uü]nftig|zuk[uü]nftig)\s+(?:in|nach)\b", re.I)
+
+
+def change_modality(change: dict | None) -> str | None:
+    """The modality of a change as the text now stands: the new side, the old one only
+    where there is no new one.
+
+    A deletion has an old side and nothing else, so that is what it is judged by. A
+    change whose duty became a note is judged by the note: axis C asks what the new text
+    means for whoever is bound, and the old modality is the previous answer to that
+    question, not the current one.
+    """
+    mod = (change or {}).get("modality") or {}
+    return mod.get("new") or mod.get("old")
+
+
+def free_text(deutung: dict) -> str:
+    """``change`` and ``impact`` of one interpretation, joined -- what a reader reads."""
+    return f"{deutung.get('change') or ''} {deutung.get('impact') or ''}"
+
+
+def successor_named(deutung: dict) -> bool:
+    """Whether the free text names where the rule now lives (the narrow form).
+
+    Says nothing about the axes; the caller adds the condition it needs (``narrowed``
+    for the flag, ``narrowed`` or ``extended`` for the wider measurement).
+    """
+    return bool(_SUCCESSOR_NAMED.search(free_text(deutung)))
+
+
+def successor_hint(deutung: dict) -> bool:
+    """The wide form of :func:`successor_named` -- for measurement, never for a record."""
+    return bool(_SUCCESSOR_HINT.search(free_text(deutung)))
+
+
+def move_pairs(synopse: dict) -> dict:
+    """Join the two records of every move over the pointer the aligner left behind.
+
+    A move is one event with two change records: ``moved_away`` in the old chapter and
+    ``moved_in`` in the new one. ``moved_away.moved_to`` is the ``new_ids[0]`` of its
+    ``moved_in``, so the pair is known deterministically -- no similarity measure and no
+    model.
+
+    Three results, and all three are reported:
+
+    * ``pairs`` -- what the pointer proves.
+    * ``unpaired`` -- a ``moved_away`` without a pointer. The block continuation of AP-26
+      knows the chapter (``moved_to_chapter``, ``via: "block"``, confidence 0.0) and not
+      the paragraph; pairing it would compare two interpretations that may be about
+      different paragraphs. 15 / 35 / 3 of the moves over the three runs.
+    * ``dangling`` -- a pointer into a record the pipeline does not call ``moved_in``.
+      Seven times in the 60909 run the old side says "moved to X" while the new side
+      calls X ``new``, and both are counted today. That is a finding of the
+      deterministic stage, so it is reported rather than skipped.
+    """
+    holders: dict[str, list[tuple[str, int, str]]] = {}
+    for ch in synopse.get("chapters") or []:
+        for i, rec in enumerate(ch.get("changes") or []):
+            for new_id in (rec.get("new_ids") or []):
+                holders.setdefault(new_id, []).append(
+                    (ch.get("mapping_id"), i, rec.get("kind")))
+    pairs, unpaired, dangling = [], [], []
+    for ch in synopse.get("chapters") or []:
+        for i, rec in enumerate(ch.get("changes") or []):
+            if rec.get("kind") != "moved_away":
+                continue
+            here = {"mapping_id": ch.get("mapping_id"), "change_index": i}
+            target = rec.get("moved_to")
+            if not target:
+                unpaired.append({**here, "moved_to_chapter": rec.get("moved_to_chapter"),
+                                 "via": rec.get("via")})
+                continue
+            found = [(m, j) for m, j, kind in holders.get(target, [])
+                     if kind == "moved_in"]
+            if found:
+                pairs.append({"new_id": target, "away": here,
+                              "into": {"mapping_id": found[0][0],
+                                       "change_index": found[0][1]}})
+            else:
+                dangling.append({**here, "moved_to": target,
+                                 "kinds": [k for _m, _j, k in holders.get(target, [])]})
+    return {"pairs": pairs, "unpaired": unpaired, "dangling": dangling}
+
+
+def _interpretation_index(chapters: list[dict]) -> dict:
+    """``(mapping_id, change_index) -> interpretation``, in the order of the artefact."""
+    rows: dict[tuple, dict] = {}
+    for ch in chapters:
+        for d in (ch.get("interpretations") or ch.get("deutungen") or []):
+            i = d.get("change_index")
+            if isinstance(i, int):
+                rows[(ch.get("mapping_id"), i)] = d
+    return rows
+
+
+#: The flags the four checks write. Their overlap is the answer to "are these four
+#: different kinds of error or four views of the same one".
+CONSISTENCY_FLAGS = ("axis_partner_disagreement", "axis_b_contradicts_a",
+                     "axis_c_contradicts_modality", "successor_named")
+
+
+def check_consistency(chapters: list[dict], synopse: dict) -> dict:
+    """The four checks of AP-29 over a finished interpretation -- offline, marking only.
+
+    Reads the axes off the interpretations and the facts off the synopse, writes the
+    flags of :data:`CONSISTENCY_FLAGS` onto the records that fail a check and returns the
+    counts. A ``deutung.json`` from before the axes carries none of the fields the checks
+    read, so it produces zero findings instead of an exception -- the same rule the axis
+    report follows for the column of an older run.
+
+    A flag is only ever written where a check fires: an artefact that passes all four is
+    the artefact it was, field for field.
+    """
+    changes = {ch.get("mapping_id"): (ch.get("changes") or [])
+               for ch in (synopse.get("chapters") or [])}
+    rows = _interpretation_index(chapters)
+    joined = move_pairs(synopse)
+
+    by_axis = Counter()
+    n_pairs_interpreted = n_partner = 0
+    for pair in joined["pairs"]:
+        away = rows.get((pair["away"]["mapping_id"], pair["away"]["change_index"]))
+        into = rows.get((pair["into"]["mapping_id"], pair["into"]["change_index"]))
+        if away is None or into is None:
+            continue
+        n_pairs_interpreted += 1
+        disputed = [a for a in PARTNER_AXES if away.get(a) != into.get(a)]
+        if not disputed:
+            continue
+        n_partner += 1
+        by_axis.update(disputed)
+        # both sides, never one: which of the two is right is a question for the schema
+        # rule, not for a check that has no standard text in front of it
+        for own, other, where in ((away, into, pair["into"]),
+                                  (into, away, pair["away"])):
+            own.setdefault("axis_partner_disagreement", []).extend(
+                {"axis": a, "value": own.get(a), "partner_value": other.get(a),
+                 "partner_mapping_id": where["mapping_id"],
+                 "partner_change_index": where["change_index"]} for a in disputed)
+
+    n_b = n_c = n_soft = n_successor = 0
+    for (mid, i), d in rows.items():
+        records = changes.get(mid) or []
+        change = records[i] if 0 <= i < len(records) else None
+        if (d.get("semantic_status") == "equivalent"
+                and d.get("structural_operation") in WITHOUT_COUNTERPART):
+            d["axis_b_contradicts_a"] = True
+            n_b += 1
+        modality, direction = change_modality(change), d.get("normative_direction")
+        if modality in MODAL_LABELS and direction == "not_applicable":
+            d["axis_c_contradicts_modality"] = True
+            n_c += 1
+        # ... and the other way round only as a number: the modality detection is known
+        # to miss a list item under a "muss" stem sentence, and a duty can be phrased
+        # without a modal verb. Marking the record would assert that the deterministic
+        # side is right, which is the very thing this case leaves open.
+        if modality == "informativ" and direction in ("tightened", "relaxed"):
+            n_soft += 1
+        if d.get("semantic_status") == "narrowed" and successor_named(d):
+            d["successor_named"] = True
+            n_successor += 1
+
+    return {
+        "n_pairs": len(joined["pairs"]), "n_pairs_interpreted": n_pairs_interpreted,
+        "n_unpaired": len(joined["unpaired"]), "n_dangling": len(joined["dangling"]),
+        "dangling": joined["dangling"],
+        "n_partner_disagreement": n_partner,
+        "by_axis": {a: by_axis[a] for a in PARTNER_AXES},
+        "n_axis_b_contradicts_a": n_b,
+        "n_axis_c_contradicts_modality": n_c,
+        "n_informative_with_direction": n_soft,
+        "n_successor_named": n_successor,
+        "n_multiple_flags": sum(1 for d in rows.values()
+                                if sum(1 for f in CONSISTENCY_FLAGS if d.get(f)) > 1),
+    }
+
+
+def consistency_feedback(report: dict) -> list[dict]:
+    """The six numbers of :func:`check_consistency` as ``pipeline_feedback`` entries.
+
+    Written at zero as well. A number that only appears when it is bad leaves the good
+    case unmeasured, which is how the silent table cap of AP-20 survived two production
+    runs -- and how the coverage of AP-28 reported 100 % over 77 missing answers.
+    """
+    r = report
+    return [
+        {"section_id": None, "phase": "deutung", "field": "axis_partner_disagreement",
+         "count": r["n_partner_disagreement"], "by_axis": r["by_axis"],
+         "n_pairs": r["n_pairs"], "n_pairs_interpreted": r["n_pairs_interpreted"],
+         "finding": (f"{r['n_partner_disagreement']} of {r['n_pairs_interpreted']} "
+                     f"interpreted move pair(s) disagree between their two sides "
+                     f"(semantic_status: {r['by_axis']['semantic_status']}, "
+                     f"normative_direction: {r['by_axis']['normative_direction']}); "
+                     f"{r['n_pairs']} pair(s) joined over the pointer, "
+                     f"{r['n_unpaired']} move(s) carry no pointer and were not checked")},
+        {"section_id": None, "phase": "alignment", "field": "move_pointer",
+         "count": r["n_dangling"], "dangling": r["dangling"],
+         "finding": (f"{r['n_dangling']} moved_away record(s) point at a paragraph the "
+                     f"comparison does not report as moved_in; the old side says the "
+                     f"text moved, the new side reports it as new, and both are counted")},
+        {"section_id": None, "phase": "deutung", "field": "axis_b_contradicts_a",
+         "count": r["n_axis_b_contradicts_a"],
+         "finding": (f"{r['n_axis_b_contradicts_a']} interpretation(s) answer "
+                     f"semantic_status 'equivalent' for a change without a counterpart "
+                     f"(structural_operation added or removed); marked, not corrected")},
+        {"section_id": None, "phase": "deutung", "field": "axis_c_contradicts_modality",
+         "count": r["n_axis_c_contradicts_modality"],
+         "finding": (f"{r['n_axis_c_contradicts_modality']} interpretation(s) call a "
+                     f"change with a modal sentence non-normative "
+                     f"(normative_direction 'not_applicable'); marked, not corrected")},
+        {"section_id": None, "phase": "deutung", "field": "informative_with_direction",
+         "count": r["n_informative_with_direction"],
+         "finding": (f"{r['n_informative_with_direction']} interpretation(s) report a "
+                     f"direction for a change the modality detection reads as "
+                     f"informative; counted only, no record marked -- the detection is "
+                     f"not certain enough here to overrule the interpretation")},
+        {"section_id": None, "phase": "deutung", "field": "successor_named",
+         "count": r["n_successor_named"], "n_multiple_flags": r["n_multiple_flags"],
+         "finding": (f"{r['n_successor_named']} interpretation(s) report semantic_status "
+                     f"'narrowed' while their own free text names the section the rule "
+                     f"moved to; {r['n_multiple_flags']} interpretation(s) carry more "
+                     f"than one of the four flags")},
+    ]
 
 
 # ------------------------------------------------------------------ what the run lost
@@ -1815,7 +2087,9 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
 
     # ---- phase 3: assemble, guard the evidence, collect the review queue ----------
     results = []
-    review = []
+    # (where it belongs, the record) per interpretation and per asset, in the order
+    # deutung.json lists them -- the queue is built from these once every check has run
+    candidates: list[tuple[dict, dict]] = []
     dropped: list[dict] = []       # pipeline-owned values the model supplied anyway
     lost: list[dict] = []          # chapters without an interpretation, with the reason
     outcomes = getattr(answer_source, "outcomes", None) or {}
@@ -1873,10 +2147,10 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                 # the review queue still keys on evidence_ok (ENT-18): it switches to
                 # evidence_strict once the difference between both is quantified.
                 # change_index_disputed is an additional trigger, with its own reason.
-                reasons = _review_reasons(d)
-                if reasons:
-                    review.append({"section_id": cid, "mapping_id": mid,
-                                   "review_reasons": reasons, **d})
+                # Which interpretations end up in the queue is decided after the loop:
+                # the two reasons of AP-29 compare a chapter with another one, so they
+                # are not known while this chapter is being assembled.
+                candidates.append(({"section_id": cid, "mapping_id": mid}, d))
             # table/figure interpretations: check evidence against cells/captions
             if data.get("tables") or data.get("figures"):
                 hay = asset_haystack(ch, o_secs, n_secs)
@@ -1884,10 +2158,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                     for a in (data.get(kind) or []):
                         drops.update(drop_pipeline_owned(a, PIPELINE_OWNED_ASSET).keys())
                         a.update(check_asset_evidence(a, hay))
-                        if not a["evidence_ok"]:
-                            review.append({"section_id": cid, "mapping_id": mid,
-                                           "asset": kind[:-1],
-                                           "review_reasons": ["evidence_ok"], **a})
+                        candidates.append(({"section_id": cid, "mapping_id": mid,
+                                            "asset": kind[:-1]}, a))
         # Which chapter this answer belongs to is decided here, not in the answer: the
         # model is asked to echo section_id and in the 4110 run it did not -- it wrote a
         # slug of the heading, or the value of the "Teil" field for unnumbered annexes,
@@ -1924,6 +2196,22 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                             f"interpretation(s): {seen[:5]}; discarded, not corrected"),
             })
 
+    # ---- phase 4: the checks that need more than one chapter, then the queue ------
+    # AP-29: a move is one event with two change records in two chapters, so the two
+    # sides can only be compared once every chapter is assembled. The three other checks
+    # run here as well, in one pass over the same index.
+    consistency = check_consistency(results, synopse)
+    review = []
+    for where, record in candidates:
+        if "asset" in where:
+            # a table or figure has no axes and no change index; its only trigger is
+            # the quote, exactly as before
+            reasons = [] if record["evidence_ok"] else ["evidence_ok"]
+        else:
+            reasons = _review_reasons(record)
+        if reasons:
+            review.append({**where, "review_reasons": reasons, **record})
+
     # aggregate preprocessing feedback -> feed it back to the pipeline phases
     feedback = []
     for r in results:
@@ -1946,6 +2234,8 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                                n_changes_total=sum(len(c.get("changes") or [])
                                                    for c in synopse["chapters"]))
     feedback.append(coverage_feedback(coverage))
+    # ... and where the interpretation contradicts what the pipeline knows by itself
+    feedback += consistency_feedback(consistency)
     for line in answer_summary(len(results), n_llm, lost, out_dir / "llm_prompts",
                                coverage=coverage, n_reasoning=n_reasoning):
         print(line)
@@ -1953,6 +2243,7 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     out = {"model": model if live else None, "mode": "api" if live else "export",
            "language": language,
            "n_chapters": len(results), "n_llm": n_llm, "coverage": coverage,
+           "consistency": consistency,
            "chapters": results,
            "review_queue": review, "pipeline_feedback": feedback}
     (out_dir / "deutung.json").write_text(json.dumps(out, ensure_ascii=False, indent=1),
