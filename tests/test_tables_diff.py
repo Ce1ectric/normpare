@@ -29,7 +29,14 @@ The material is synthetic and shaped like 10.3.4, no norm text. No network.
 """
 import json
 
-from normpare.stages.diff import caption_text, cross_chapter_tables, tables_diff
+from normpare.stages import diff
+from normpare.stages.align import paras
+from normpare.stages.diff import (
+    TABLE_MATCH_MIN,
+    caption_text,
+    cross_chapter_tables,
+    tables_diff,
+)
 
 # -- material, shaped like 4110/10.3.4 -------------------------------------------------------
 # Old A ("Tabelle 11") belongs to new Y ("Tabelle 17") -- same descriptive caption.
@@ -452,3 +459,159 @@ def test_existing_kinds_keep_their_meaning():
     assert {r["kind"] for r in rec["10.3.4"]} == {"matched"}
     assert [r["kind"] for r in rec["11.1"]] == ["removed"]
     assert [r["kind"] for r in rec["12.1"]] == ["new"]
+
+
+# -- AP-36: the assignment repeats instead of running once -----------------------------------
+#
+# The Hungarian assignment maximizes the *sum* over all pairs and the threshold cuts
+# afterwards, so a very good pair can be traded for two mediocre ones and the partners it
+# leaves behind fall apart into "new" + "removed" (AP-35 6.3). The assignment is repeated
+# over the rows and columns a rejected pair frees, until a round adds nothing.
+#
+# The two matrices below are the measured ones of the two records the effect was found in
+# -- numbers only, no norm text: runs/AP-36_2026-09-01/matrix_C4.txt and matrix_E9.txt.
+
+#: 4110, record ``C.4<C.4``: six old tables, three new ones. The sum picks old 0 / new 0
+#: (1.000) and old 3 / new 2 (0.937) and gives new 1 to old 2 at 0.382, which the
+#: threshold then throws away -- although old 3 fits new 1 at 0.937 just as well.
+C4_SIM = [[1.000, 0.672, 0.672],
+          [0.594, 0.368, 0.338],
+          [0.577, 0.382, 0.356],
+          [0.722, 0.937, 0.937],
+          [0.504, 0.424, 0.340],
+          [0.257, 0.044, 0.056]]
+
+#: 4120, record ``E.9<E.7``: six by six, same shape at 0.785 / 0.769.
+E9_SIM = [[0.395, 0.500, 0.407, 0.416, 0.660, 0.359],
+          [0.429, 0.981, 0.785, 0.433, 0.619, 0.369],
+          [0.461, 0.618, 0.473, 0.497, 0.769, 0.430],
+          [0.370, 0.441, 0.377, 0.986, 0.569, 0.333],
+          [0.432, 0.559, 0.450, 0.498, 0.952, 0.412],
+          [0.053, 0.032, 0.047, 0.094, 0.354, 0.046]]
+
+#: Every matrix the guarantees below are checked over, including the two measured ones.
+MATRICES = [
+    C4_SIM, E9_SIM,
+    [[0.90, 0.10], [0.10, 0.30]],          # one pair accepted, one rejected
+    [[0.90, 0.20], [0.20, 0.80]],          # everything above the threshold at once
+    [[0.20, 0.10], [0.10, 0.30]],          # nothing above it at all
+    [[0.54, 0.54], [0.54, 0.54]],          # everything just below it
+    [[0.60, 0.50, 0.40], [0.50, 0.60, 0.30]],
+    [[0.80], [0.70], [0.60]],              # more old tables than new ones
+    [[0.80, 0.70, 0.60]],                  # and the other way round
+]
+
+
+#: The unwrapped solver, captured before any test substitutes the module attribute --
+#: the reference implementation below must not be counted as a round of its own.
+_LSA = paras._lsa
+
+
+def _matrix_tables(sim):
+    """Two table lists whose ids index ``sim`` -- the assignment sees nothing else."""
+    return ([{"id": f"o{i}"} for i in range(len(sim))],
+            [{"id": f"n{j}"} for j in range(len(sim[0]))])
+
+
+def _assign(sim, monkeypatch):
+    """The production assignment over a given matrix, plus the cost matrix of each round.
+
+    The measure is substituted, not rebuilt: what AP-36 changes is the assignment, and a
+    matrix is exactly the input it reasons about. ``_lsa`` is wrapped to count the rounds
+    -- "the assignment is repeated" is otherwise not observable from the outside.
+    """
+    ot, nt = _matrix_tables(sim)
+    monkeypatch.setattr(diff, "table_similarity",
+                        lambda a, b: sim[int(a["id"][1:])][int(b["id"][1:])])
+    rounds = []
+
+    def counting(cost):
+        rounds.append([list(row) for row in cost])
+        return _LSA(cost)
+
+    monkeypatch.setattr(paras, "_lsa", counting)
+    return diff._assign_tables(ot, nt), rounds
+
+
+def _single_round(sim):
+    """The assignment as it was before AP-36: one optimum, then the threshold."""
+    rows, cols = _LSA([[-s for s in row] for row in sim])
+    return {int(j): (int(i), sim[int(i)][int(j)]) for i, j in zip(rows, cols)
+            if sim[int(i)][int(j)] >= TABLE_MATCH_MIN}
+
+
+def _pair_set(matched):
+    return {(i, j) for j, (i, _s) in matched.items()}
+
+
+def test_the_assignment_repeats_after_a_rejected_pair(monkeypatch):
+    """A rejected pair frees its row and its column, and a second round looks at them."""
+    matched, rounds = _assign([[0.90, 0.10], [0.10, 0.30]], monkeypatch)
+    assert _pair_set(matched) == {(0, 0)}
+    assert len(rounds) == 2
+    # the second round sees exactly the freed rest, one row and one column
+    assert rounds[1] == [[-0.30]]
+
+
+def test_a_displaced_pair_is_not_recovered_by_repetition(monkeypatch):
+    """The measured case: the repetition cannot buy back a partner that is *paired*.
+
+    In 4110 C.4 old 3 fits new 1 and new 2 equally well (0.937) and the sum gives it to
+    new 2; new 1 is left with 0.382 and falls apart into an addition. Old 3 stays paired
+    above the threshold, so no round ever frees it again -- recovering that pair would
+    mean giving up an existing one, which this package rules out. The case is pinned
+    here so the boundary is visible instead of assumed (see the report, section 6).
+    """
+    for sim, displaced in ((C4_SIM, (3, 1)), (E9_SIM, (1, 2))):
+        matched, _rounds = _assign(sim, monkeypatch)
+        assert _pair_set(matched) == _pair_set(_single_round(sim))
+        assert displaced not in _pair_set(matched)
+        # the competitor holds the row, and holds it above the threshold
+        row, col = displaced
+        assert row in {i for i, _j in _pair_set(matched)}
+        assert col not in {j for _i, j in _pair_set(matched)}
+
+
+def test_no_existing_pair_is_lost(monkeypatch):
+    """The pairs of the single round are a subset of the pairs after the repetition.
+
+    Round one is unchanged and its accepted pairs are fixed; later rounds only ever work
+    on what is left over. Checked over every matrix, the two measured ones included.
+    """
+    for sim in MATRICES:
+        matched, _rounds = _assign(sim, monkeypatch)
+        assert _pair_set(_single_round(sim)) <= _pair_set(matched)
+
+
+def test_the_threshold_is_unchanged(monkeypatch):
+    """No round produces a pair below :data:`TABLE_MATCH_MIN` -- no threshold moved."""
+    for sim in MATRICES:
+        matched, _rounds = _assign(sim, monkeypatch)
+        for _i, score in matched.values():
+            assert score >= TABLE_MATCH_MIN
+    matched, _rounds = _assign([[0.54, 0.54], [0.54, 0.54]], monkeypatch)
+    assert matched == {}
+
+
+def test_the_assignment_terminates(monkeypatch):
+    """A matrix without a single pair above the threshold: one round, no pair."""
+    matched, rounds = _assign([[0.20, 0.10], [0.10, 0.30]], monkeypatch)
+    assert matched == {}
+    assert len(rounds) == 1
+
+
+def test_the_assignment_is_deterministic(monkeypatch):
+    """Twice computed, the same pairs in the same order -- rounds included."""
+    for sim in MATRICES:
+        first, rounds_a = _assign(sim, monkeypatch)
+        second, rounds_b = _assign(sim, monkeypatch)
+        assert list(first.items()) == list(second.items())
+        assert rounds_a == rounds_b
+
+
+def test_a_single_round_case_is_unchanged(monkeypatch):
+    """Where round one hands out everything above the threshold, nothing changes."""
+    sim = [[0.90, 0.20], [0.20, 0.80]]
+    matched, rounds = _assign(sim, monkeypatch)
+    assert list(matched.items()) == list(_single_round(sim).items())
+    assert len(rounds) == 1
