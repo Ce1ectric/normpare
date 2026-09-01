@@ -31,6 +31,9 @@ from normpare.stages.deutung import (
     ASSET_REVIEW_REASONS,
     ASSET_SCHEMA_DOC,
     PIPELINE_OWNED_ASSET,
+    SIDE_BOTH,
+    SIDE_NEW,
+    SIDE_OLD,
     FixtureProvider,
     asset_review_reasons,
     build_chapter_prompt,
@@ -42,6 +45,7 @@ from normpare.stages.deutung import (
     resolve_table,
     run_deutung,
     table_key,
+    value_change_sides,
 )
 from normpare.stages.enrich import enrich_doc
 from normpare.stages.enrich.values import cell_values, extract_values
@@ -562,3 +566,127 @@ def test_values_elsewhere_is_pipeline_owned():
     assert "values_elsewhere" in PIPELINE_OWNED_ASSET
     assert drop_pipeline_owned({"values_elsewhere": 7}, PIPELINE_OWNED_ASSET) == \
         {"values_elsewhere": 7}
+
+
+# -- AP-36 part 1: a table without a counterpart has one side to search on ---------------
+
+ONE_ID = {"new": "neu_tab_007", "old": "alt_tab_007"}
+ONE_CAPTION = "Tabelle 7 – Impedanzwinkelfaktor"
+#: Shaped like 4110 B.9.9 / tab_097: both numbers of the entry stand in the cells of the
+#: one edition this table has -- the arrow between them assigns, it does not date.
+ONE_CELLS = [["Parameter", "Wert"], ["X/R", "0,2"], ["kXR", "0,4"]]
+ONE_ENTRY = "X/R < 0,2 -> kXR = 0,4"
+
+
+def _one_sided_docs(side: str) -> tuple[dict, dict]:
+    """The two documents with the table on ``side`` only -- the other side has none."""
+    docs = {"old": _doc(ONE_ID["old"], ONE_CELLS, OLD_TEXT),
+            "new": _doc(ONE_ID["new"], ONE_CELLS, NEW_TEXT)}
+    empty = _doc(ONE_ID["old" if side == "new" else "new"], ONE_CELLS, OLD_TEXT)
+    empty["sections"][0]["tables"] = []
+    return ((empty, docs["new"]) if side == "new" else (docs["old"], empty))
+
+
+def _one_sided_chapter(side: str, extra: list[dict] | None = None) -> dict:
+    """The chapter of :func:`_one_sided_docs`: one ``tables_diff`` entry, one side."""
+    ch = _chapter()
+    ch["tables_diff"] = [{"kind": side, side: ONE_ID[side], "caption": ONE_CAPTION}] \
+        + (extra or [])
+    return ch
+
+
+def _one_sided_entry(side: str = "new", **over) -> dict:
+    d = {"table": ONE_CAPTION, "table_ref": ONE_ID[side], "value_changes": [ONE_ENTRY]}
+    d.update(over)
+    return _table_entry(**d)
+
+
+def test_a_new_table_searches_both_arrow_sides_on_its_own_side():
+    """A table added by the new edition has no old side to hold the left half against.
+
+    ``value_change_sides`` charges the left half of an arrow to the old edition, and for
+    a ``kind: "new"`` table that edition is the empty set: every value left of the arrow
+    counts as missing however plainly it stands in the cells. Measured on 4110 B.9.9 /
+    tab_097 (30 checked / 10 found, all 20 missing ones in the cells of the new side).
+    """
+    entry = _one_sided_entry()
+    res = _check(entry, _one_sided_chapter("new"), _one_sided_docs("new"))
+    assert (res["values_checked"], res["values_found"]) == (2, 2)
+    assert res["values_ok"] is True
+    assert asset_review_reasons({**entry, **res}) == []
+
+
+def test_a_removed_table_searches_both_arrow_sides_on_its_own_side():
+    """The mirror case: a table the new edition dropped has only its old side."""
+    entry = _one_sided_entry(side="old")
+    res = _check(entry, _one_sided_chapter("removed"), _one_sided_docs("old"))
+    assert (res["values_checked"], res["values_found"]) == (2, 2)
+    assert res["values_ok"] is True
+
+
+def test_a_two_sided_table_keeps_its_side_discipline():
+    """A pair keeps both haystacks apart: left is the old edition, right the new one.
+
+    The substitution is for the *missing* side only. Where both sides exist, an entry
+    that names them the wrong way round still finds nothing -- that is the whole point of
+    splitting at the arrow.
+    """
+    right = _table_entry(value_changes=["Wirkleistung: 500 kW -> 400 kW"])
+    res = _check(right, _chapter(), _docs())
+    assert (res["values_checked"], res["values_found"]) == (2, 2)
+
+    swapped = _table_entry(value_changes=["Wirkleistung: 400 kW -> 500 kW"])
+    res = _check(swapped, _chapter(), _docs())
+    assert (res["values_checked"], res["values_found"]) == (2, 0)
+
+
+def test_an_entry_without_an_arrow_is_unchanged():
+    """Without an arrow both editions are searched, on a pair and on a single table."""
+    both = _table_entry(value_changes=["Frequenz 50 Hz"])
+    res = _check(both, _chapter(), _docs())
+    assert (res["values_checked"], res["values_found"]) == (1, 1)
+
+    single = _one_sided_entry(value_changes=["Zeile für kXR = 0,4 entfällt"])
+    res = _check(single, _one_sided_chapter("new"), _one_sided_docs("new"))
+    assert (res["values_checked"], res["values_found"]) == (1, 1)
+
+    absent = _one_sided_entry(value_changes=["Zeile für kXR = 0,9 entfällt"])
+    res = _check(absent, _one_sided_chapter("new"), _one_sided_docs("new"))
+    assert (res["values_checked"], res["values_found"]) == (1, 0)
+
+
+def test_value_change_sides_is_untouched():
+    """The split at the arrow is right; what the halves were held against was not.
+
+    Pinned as a parity table: the same pairs as before AP-36, for every arrow shape and
+    for the entry without one.
+    """
+    assert value_change_sides("500 kW -> 400 kW") == [(SIDE_OLD, "500 kW"),
+                                                      (SIDE_NEW, "400 kW")]
+    for arrow in ("->", "-->", "=>", "==>", "→", "➔", "➝", "»"):
+        assert value_change_sides(f"5 % {arrow} 4 %") == [(SIDE_OLD, "5 %"),
+                                                          (SIDE_NEW, "4 %")]
+    assert value_change_sides("Zeile für 0,85 Un entfernt") == \
+        [(SIDE_BOTH, "Zeile für 0,85 Un entfernt")]
+    assert value_change_sides("") == [(SIDE_BOTH, "")]
+    # only the first arrow splits, and it splits into exactly two halves
+    assert value_change_sides("1 -> 2 -> 3") == [(SIDE_OLD, "1"), (SIDE_NEW, "2 -> 3")]
+
+
+def test_a_one_sided_sibling_is_searched_on_its_own_side():
+    """The neighbourhood follows the same rule, table by table.
+
+    ``values_elsewhere`` reads the *other* tables of the record. A neighbour without a
+    counterpart contributes to one side only, and charging the left half of an arrow to
+    its empty side would lose the weaker proof for the same reason the named table lost
+    the stronger one.
+    """
+    docs = _one_sided_docs("new")
+    docs[1]["sections"][0]["tables"].append(
+        _table(SIB_NEW_ID, [["Parameter", "Wert"], ["kXR", "0,7"]], caption=SIB_CAPTION))
+    ch = _one_sided_chapter("new", extra=[{"kind": "new", "new": SIB_NEW_ID,
+                                           "caption": SIB_CAPTION}])
+    entry = _one_sided_entry(value_changes=["kXR 0,7 -> 0,4"])
+    res = _check(entry, ch, docs)
+    assert (res["values_checked"], res["values_found"], res["values_elsewhere"]) == \
+        (2, 1, 1)
