@@ -194,3 +194,58 @@ def test_the_docstring_names_the_post_map_state():
     assert "already enriched" not in doc, "the claim that no longer holds is still there"
     assert "map" in doc
     assert "synthetic_title" in doc
+
+
+# -- AP-33: the strip lives next to the producer ------------------------------------------
+
+def test_the_strip_lives_next_to_the_producer():
+    """Flag and removal sit where the paragraphs are made, not in one of the tools.
+
+    ``replay.py`` was the first tool to recompute from a finished run, it will not be the
+    last: ``axis_consistency.py`` and ``mapping_balance.py`` read the same artifacts. A
+    second copy of the string would be a second chance to spell it differently.
+    """
+    from normpare.stages.align import sections
+
+    assert sections.SYNTHETIC_FLAG == "synthetic_title"
+    assert callable(sections.strip_synthetic_paragraphs)
+
+
+def test_the_producer_uses_the_constant():
+    """The insertion names the constant, so producer and remover cannot drift apart."""
+    import inspect
+
+    from normpare.stages.align import sections
+
+    src = inspect.getsource(sections.build_section_mapping)
+    assert "SYNTHETIC_FLAG" in src
+    assert '"synthetic_title"' not in src, "the literal is still in the insertion"
+
+
+def test_the_strip_works_on_a_document_dict():
+    """Document in, document out, count back -- reading the file stays with the tool."""
+    from normpare.stages.align.sections import strip_synthetic_paragraphs
+
+    doc = _doc("alt", synthetic=True)
+    kept = [p["id"] for s in doc["sections"] for p in s["paragraphs"]
+            if not p.get("synthetic_title")]
+
+    removed = strip_synthetic_paragraphs(doc)
+
+    assert removed == 1
+    assert [p["id"] for s in doc["sections"] for p in s["paragraphs"]] == kept
+    assert [s["id"] for s in doc["sections"]] == ["1", "2"]   # the sections stay
+    assert strip_synthetic_paragraphs(_doc("alt", synthetic=False)) == 0
+
+
+def test_replay_still_strips_the_same_paragraphs(tmp_path):
+    """The move changes nothing the tool does: same removal, same count, same bytes."""
+    ref = make_reference(tmp_path / "ref")
+
+    assert replay.strip_synthetic_paragraphs(ref / "alt" / "norm_doc.json") == 1
+    assert _synthetic_ids(ref / "alt" / "norm_doc.json") == []
+
+    untouched = make_reference(tmp_path / "ref2", alt_synthetic=False)
+    before = (untouched / "alt" / "norm_doc.json").read_bytes()
+    assert replay.strip_synthetic_paragraphs(untouched / "alt" / "norm_doc.json") == 0
+    assert (untouched / "alt" / "norm_doc.json").read_bytes() == before

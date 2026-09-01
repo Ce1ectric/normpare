@@ -387,7 +387,8 @@ PIPELINE_OWNED_INTERPRETATION = ("evidence_ok", "evidence_strict", "evidence_mat
 PIPELINE_OWNED_ASSET = ("evidence_ok", "evidence_strict", "evidence_match_chars",
                         "evidence_fragments", "evidence_unique",
                         "evidence_span", "evidence_extraction",
-                        "table_id", "values_checked", "values_found", "values_ok")
+                        "table_id", "values_checked", "values_found", "values_ok",
+                        "values_elsewhere")
 
 
 def drop_pipeline_owned(obj: dict, fields=PIPELINE_OWNED_INTERPRETATION) -> dict:
@@ -1122,10 +1123,17 @@ def _cell_keys(table: dict | None) -> set[tuple[str, str]]:
     return values.value_keys(recs)
 
 
-def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict) -> dict:
+def _sides(keys: dict) -> dict:
+    """The three haystacks a value is looked for in, from an ``{old, new}`` key pair."""
+    return {SIDE_OLD: keys[SIDE_OLD], SIDE_NEW: keys[SIDE_NEW],
+            SIDE_BOTH: keys[SIDE_OLD] | keys[SIDE_NEW]}
+
+
+def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict,
+                       tds: list[dict] | None = None) -> dict:
     """Check the values of a table interpretation against the cells of its table.
 
-    Returns the four fields written onto the entry:
+    Returns the five fields written onto the entry:
 
     ``table_id``
         the table the entry was joined to, ``None`` when it names none.
@@ -1134,40 +1142,80 @@ def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict) 
         recognizable number ("Zeile entfällt") has nothing to check, and that is no
         error -- it is counted as 0, not as a failure.
     ``values_found``
-        how many of them appear in the cells of their edition.
+        how many of them appear in the cells of their edition **of the named table**.
     ``values_ok``
-        whether all recognized values were found.
+        whether all recognized values were found there.
+    ``values_elsewhere``
+        how many of the remaining values stand in another table of the same chapter
+        (AP-33). Such a value is **not** found -- it is proved more weakly, and the
+        difference between "checked" and "found somewhere" has to survive the count.
+        Hence ``values_checked >= values_found + values_elsewhere``, and what is left
+        over stands nowhere in the chapter.
 
-    All three counts are ``None`` when no table could be joined: such an entry is
+    The neighbourhood is the ``tables_diff`` of this mapping record, both sides resolved
+    like the named table itself: a document-wide search would find every percentage
+    somewhere. ``tds`` defaults to no neighbours at all, so a caller that knows of none
+    gets the pre-AP-33 numbers.
+
+    All four counts are ``None`` when no table could be joined: such an entry is
     reported as **unchecked**, never as wrong. Counting it as a failure would measure the
     join instead of the statement.
     """
     if td is None:
         return {"table_id": None, "values_checked": None, "values_found": None,
-                "values_ok": None}
-    old_keys = _cell_keys(o_tabs.get(td.get("old")))
-    new_keys = _cell_keys(n_tabs.get(td.get("new")))
-    haystacks = {SIDE_OLD: old_keys, SIDE_NEW: new_keys, SIDE_BOTH: old_keys | new_keys}
-    checked = found = 0
+                "values_ok": None, "values_elsewhere": None}
+    named = _sides({SIDE_OLD: _cell_keys(o_tabs.get(td.get("old"))),
+                    SIDE_NEW: _cell_keys(n_tabs.get(td.get("new")))})
+    others = [t for t in tds or [] if t is not td]
+    siblings = _sides({
+        SIDE_OLD: set().union(*(_cell_keys(o_tabs.get(t.get("old"))) for t in others)),
+        SIDE_NEW: set().union(*(_cell_keys(n_tabs.get(t.get("new"))) for t in others))})
+    checked = found = elsewhere = 0
     for entry in item.get("value_changes") or []:
         for side, part in value_change_sides(str(entry)):
             for v in values.extract_values(n1(part)):
                 checked += 1
-                if (v["base_unit"], v["base_value"]) in haystacks[side]:
+                key = (v["base_unit"], v["base_value"])
+                if key in named[side]:
                     found += 1
+                elif key in siblings[side]:
+                    elsewhere += 1
     return {"table_id": table_key(td), "values_checked": checked,
-            "values_found": found, "values_ok": found == checked}
+            "values_found": found, "values_ok": found == checked,
+            "values_elsewhere": elsewhere}
 
 
 #: Why a table or figure interpretation needs a human look. ``evidence_ok`` is the
 #: historical trigger and keeps its meaning; ``values_ok`` is added by AP-31 and fires
 #: only on a **checked** entry -- an unchecked one is not a failure.
-ASSET_REVIEW_REASONS = ("evidence_ok", "values_ok")
+#: ``values_in_other_table`` (AP-33) is the weaker half of ``values_ok`` and stands
+#: behind it: see :func:`asset_review_reasons`.
+ASSET_REVIEW_REASONS = ("evidence_ok", "values_ok", "values_in_other_table")
+
+#: The two reasons of one failed value check -- never both on the same entry.
+_VALUE_REASONS = ("values_ok", "values_in_other_table")
+
+
+def values_reason(item: dict) -> str | None:
+    """Which of the two value reasons a table interpretation carries, if any.
+
+    ``values_in_other_table`` needs every missing value accounted for in a neighbouring
+    table of the chapter. Is a single one unfindable there as well, the entry is the more
+    serious case, and the more serious reason wins.
+    """
+    if item.get("values_ok") is not False:
+        return None
+    elsewhere = item.get("values_elsewhere") or 0
+    if elsewhere and (item.get("values_found") or 0) + elsewhere == item["values_checked"]:
+        return "values_in_other_table"
+    return "values_ok"
 
 
 def asset_review_reasons(item: dict) -> list[str]:
     """The reasons a table or figure interpretation is in the review queue."""
-    return [r for r in ASSET_REVIEW_REASONS if item.get(r) is False]
+    chosen = values_reason(item)
+    return [r for r in ASSET_REVIEW_REASONS
+            if (r == chosen if r in _VALUE_REASONS else item.get(r) is False)]
 
 
 #: Separators a rendered table row is built from -- see :func:`_render_cells`.
@@ -2269,6 +2317,7 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     n_collisions = 0               # two blocks claiming the same change index
     n_repaired = 0                 # answers only readable with the lenient parse
     unjoined = 0                   # table interpretations naming no table of their chapter
+    n_elsewhere = 0                # claimed values found in a sibling table, not in theirs
     for ch, cid, mid, tags, parts, old_x, new_x in jobs:
         # one chapter, one interpretation -- however many requests it took to get it
         data, _sel, collisions = merge_chapter_answers(
@@ -2332,11 +2381,15 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                         a.update(check_asset_evidence(a, hay))
                         if kind == "tables":
                             # AP-31: the values the entry claims, checked against the
-                            # cells of the table it names -- marked, never corrected
+                            # cells of the table it names -- marked, never corrected.
+                            # AP-33: and counted apart where they stand in a table next
+                            # door instead of nowhere
                             a.update(check_asset_values(a, resolve_table(a, ch),
-                                                        o_tabs, n_tabs))
+                                                        o_tabs, n_tabs,
+                                                        ch.get("tables_diff")))
                             if a["values_ok"] is None:
                                 unjoined += 1
+                            n_elsewhere += a["values_elsewhere"] or 0
                         candidates.append(({"section_id": cid, "mapping_id": mid,
                                             "asset": kind[:-1]}, a))
         # Which chapter this answer belongs to is decided here, not in the answer: the
@@ -2413,6 +2466,15 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
                          "count": unjoined,
                          "finding": (f"{unjoined} table interpretation(s) name no table of "
                                      f"their chapter; their value changes are unchecked")})
+    # ... and how many claimed values stood in a *neighbouring* table of their chapter
+    # instead of the named one (AP-33): a summary across table borders, not an invented
+    # number. Reported at zero as well -- a figure that only appears on failure leaves
+    # the good case unmeasured (AP-20, AP-28).
+    feedback.append({"section_id": None, "phase": "deutung", "field": "values_elsewhere",
+                     "count": n_elsewhere,
+                     "finding": (f"{n_elsewhere} claimed value(s) stand in another table "
+                                 f"of their chapter, not in the named one; they count as "
+                                 f"proved more weakly, never as found")})
     # ... and how much of the material carries an interpretation at all (AP-19)
     # ... measured against every change of the comparison, the chapters left out of the
     # scope included: their changes carry no interpretation either, and a base that hides
