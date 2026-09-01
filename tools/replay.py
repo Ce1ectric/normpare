@@ -5,7 +5,18 @@ Copies the frozen inputs of a reference directory (``alt/norm_doc.json``,
 ``neu/norm_doc.json``, plus ``deutung.json`` and the vector cache as frozen
 artifacts) into a destination below ``runs/`` and runs the stages ``map``,
 ``align``, ``synopse``, ``keywords`` and ``report`` on them. The ingest and enrich
-stages are skipped: the reference ``norm_doc.json`` files are already enriched.
+stages are skipped; their result is what the copied documents carry.
+
+What they carry is the state **after** ``map``, not after ``enrich`` (AP-32):
+``Pipeline.map`` writes ``alt/norm_doc.json`` back, because the chapter mapping
+materializes the titles of absorbed old sections as paragraphs in the document. Those
+paragraphs are removed from the copy before the replay starts
+(:func:`strip_synthetic_paragraphs`) -- they are marked ``synthetic_title: true``, so
+they are recognizable without ambiguity, they carry nothing but the section title, and
+``map`` creates them again anyway. Replaying over them would let them take part in the
+similarity computation a second time: a different set of sections gets absorbed, new
+synthetic paragraphs appear, and the run is continued instead of reproduced (measured
+on ``arbeit/60909_v2``: 29 moves became 36).
 
 The interpretation stage is *never* run -- no LLM call, no network. The Hugging
 Face libraries are pinned to offline mode, and every vector the embedding rescue
@@ -40,6 +51,10 @@ FROZEN = ("alt/norm_doc.json", "neu/norm_doc.json", "deutung.json", ".vec_cache.
 #: Everything except ``ingest``, ``enrich`` (already applied) and ``deutung`` (LLM).
 STAGES = ["map", "align", "synopse", "keywords", "report"]
 
+#: Marks a paragraph that ``build_section_mapping`` inserted for the title of an absorbed
+#: section. Set by the mapping stage, never by ingest or enrich.
+SYNTHETIC_FLAG = "synthetic_title"
+
 
 def stages(enrich: bool = False) -> list[str]:
     """The stages to recompute.
@@ -58,8 +73,35 @@ def _offline() -> None:
         os.environ[var] = "1"
 
 
+def strip_synthetic_paragraphs(path: Path) -> int:
+    """Remove the paragraphs ``map`` inserted into a finished run's document.
+
+    Returns how many were removed. The file is only rewritten when there was something
+    to remove, so a document without them keeps its bytes. The sections themselves stay,
+    even one that ends up without a paragraph -- only the mapping stage decides which
+    sections exist.
+    """
+    target = regression.guard_write(path)
+    doc = json.loads(target.read_text(encoding="utf-8"))
+    removed = 0
+    for sec in doc.get("sections") or []:
+        paras = sec.get("paragraphs") or []
+        kept = [p for p in paras if not p.get(SYNTHETIC_FLAG)]
+        if len(kept) != len(paras):
+            removed += len(paras) - len(kept)
+            sec["paragraphs"] = kept
+    if removed:
+        # same shape as ``pipeline._write`` -- the stages rewrite the file anyway
+        target.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    return removed
+
+
 def stage_inputs(reference: Path, dest: Path) -> list[str]:
-    """Copy the frozen inputs into ``dest``. Returns the names actually copied."""
+    """Copy the frozen inputs into ``dest``. Returns the names actually copied.
+
+    The copied ``norm_doc.json`` are the state after ``map`` and are put back to the
+    state the replay claims to start from: without the synthetic title paragraphs.
+    """
     regression.guard_write(dest)
     copied = []
     for name in FROZEN:
@@ -69,6 +111,9 @@ def stage_inputs(reference: Path, dest: Path) -> list[str]:
         target = regression.guard_write(dest / name)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, target)
+        if name.endswith("norm_doc.json"):
+            n = strip_synthetic_paragraphs(target)
+            print(f"[replay] {name}: {n} synthetic title paragraph(s) removed")
         copied.append(name)
     return copied
 

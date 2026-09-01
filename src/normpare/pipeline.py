@@ -99,7 +99,11 @@ class Pipeline:
         backend = load_backend(self.cfg.similarity)
         records = build_section_mapping(old, new, backend)
         _write(self.out / "mapping.json", {"pair": self.cfg.pair_label, "records": records})
-        _write(self.out / "alt" / "norm_doc.json", old)  # synthetic titles were added in place
+        # ``build_section_mapping`` inserted the titles of absorbed sections as synthetic
+        # paragraphs in place, so the file is written back. From here on the artifact is
+        # no longer the pure enrich state: it is the state after ``map``, and anything
+        # that recomputes from it has to remove those paragraphs first (tools/replay.py).
+        _write(self.out / "alt" / "norm_doc.json", old)
 
     def align(self) -> None:
         from .stages.align.paras import align_document
