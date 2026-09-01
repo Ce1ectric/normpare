@@ -422,6 +422,21 @@ def _assign_tables(ot: list[dict], nt: list[dict]) -> dict[int, tuple[int, float
     (4110/10.3.4: new table 16 took old table 11 before new 17 was ever asked). The
     paragraph aligner has solved the same problem with an optimal assignment all along;
     this uses its wrapper, and with it SciPy, which the project already depends on.
+
+    The assignment is **repeated** rather than run once (AP-36): a pair below
+    :data:`TABLE_MATCH_MIN` is dropped, its row and its column are free again, and the
+    rest is assigned anew until a round adds nothing. No threshold moves and no accepted
+    pair is ever given up -- later rounds only see what is left over -- so the result can
+    only grow, never shrink.
+
+    What it does *not* do is undo the trade the sum makes. Measured over the three
+    reference runs the repetition adds and loses nothing at all (0 of 23 / 19 / 2 pairs,
+    ``runs/AP-36_2026-09-01/paarung_nachher.txt``), and that is a property of the optimum,
+    not of the corpora: round one maximizes the sum over the whole matrix, so any
+    assignment of the freed rows and columns has at most the sum round one gave them, and
+    it has the same number of pairs. The six displaced tables of AP-35 6.3 stay unpaired
+    because their partner is held by a pair *above* the threshold, and buying it back
+    would mean giving that pair up.
     """
     if not ot or not nt:
         return {}
@@ -429,9 +444,20 @@ def _assign_tables(ot: list[dict], nt: list[dict]) -> dict[int, tuple[int, float
     from .align.paras import _lsa
 
     sim = [[table_similarity(t_old, t_new) for t_new in nt] for t_old in ot]
-    rows, cols = _lsa([[-s for s in row] for row in sim])
-    return {int(j): (int(i), sim[i][j]) for i, j in zip(rows, cols)
-            if sim[i][j] >= TABLE_MATCH_MIN}
+    matched: dict[int, tuple[int, float]] = {}
+    free_rows, free_cols = list(range(len(ot))), list(range(len(nt)))
+    while free_rows and free_cols:
+        rows, cols = _lsa([[-sim[i][j] for j in free_cols] for i in free_rows])
+        # sorted by the old table, the order the single assignment produced as well
+        taken = sorted((free_rows[int(a)], free_cols[int(b)]) for a, b in zip(rows, cols)
+                       if sim[free_rows[int(a)]][free_cols[int(b)]] >= TABLE_MATCH_MIN)
+        if not taken:
+            break
+        matched.update({j: (i, sim[i][j]) for i, j in taken})
+        used_rows, used_cols = {i for i, _ in taken}, {j for _, j in taken}
+        free_rows = [i for i in free_rows if i not in used_rows]
+        free_cols = [j for j in free_cols if j not in used_cols]
+    return matched
 
 
 def _rows_changed(t_old: dict, t_new: dict) -> int:
