@@ -1133,6 +1133,30 @@ def _sides(keys: dict) -> dict:
             SIDE_BOTH: keys[SIDE_OLD] | keys[SIDE_NEW]}
 
 
+def _table_keys(o_tab: dict | None, n_tab: dict | None) -> dict:
+    """The two key sets of one table diff entry, the missing side filled in (AP-36).
+
+    A table without a counterpart -- ``kind: "new"`` or ``"removed"`` -- has one edition,
+    and :func:`value_change_sides` still charges the left half of an arrow to the old one.
+    Held against the empty set, every such value counts as missing however plainly it
+    stands in the cells: 4110 B.9.9 / tab_097 reports 30 checked and 10 found, and all 20
+    others are in the cells of its new side. Where a side is missing, the haystack of that
+    side is the one that exists.
+
+    The side discipline of a **pair** is untouched: both tables are there, so nothing is
+    substituted and the old value keeps being looked for on the old side. Whether the
+    arrow of such an entry means a transition at all ("X/R < 0,2 -> kXR = 0,4" assigns,
+    it does not date) is not decided here -- the entry is only searched where it can be
+    found.
+    """
+    keys = {SIDE_OLD: _cell_keys(o_tab), SIDE_NEW: _cell_keys(n_tab)}
+    if o_tab is None and n_tab is not None:
+        keys[SIDE_OLD] = keys[SIDE_NEW]
+    elif n_tab is None and o_tab is not None:
+        keys[SIDE_NEW] = keys[SIDE_OLD]
+    return keys
+
+
 def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict,
                        tds: list[dict] | None = None) -> dict:
     """Check the values of a table interpretation against the cells of its table.
@@ -1151,6 +1175,8 @@ def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict,
         running text would leave "Dämpfung ≥0,06" without anything to look for.
     ``values_found``
         how many of them appear in the cells of their edition **of the named table**.
+        A table without a counterpart has one edition, and both halves of an arrow are
+        looked for there (AP-36, :func:`_table_keys`); a pair keeps its two sides apart.
     ``values_ok``
         whether all recognized values were found there.
     ``values_elsewhere``
@@ -1172,12 +1198,11 @@ def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict,
     if td is None:
         return {"table_id": None, "values_checked": None, "values_found": None,
                 "values_ok": None, "values_elsewhere": None}
-    named = _sides({SIDE_OLD: _cell_keys(o_tabs.get(td.get("old"))),
-                    SIDE_NEW: _cell_keys(n_tabs.get(td.get("new")))})
-    others = [t for t in tds or [] if t is not td]
-    siblings = _sides({
-        SIDE_OLD: set().union(*(_cell_keys(o_tabs.get(t.get("old"))) for t in others)),
-        SIDE_NEW: set().union(*(_cell_keys(n_tabs.get(t.get("new"))) for t in others))})
+    named = _sides(_table_keys(o_tabs.get(td.get("old")), n_tabs.get(td.get("new"))))
+    others = [_table_keys(o_tabs.get(t.get("old")), n_tabs.get(t.get("new")))
+              for t in tds or [] if t is not td]
+    siblings = _sides({side: set().union(*(k[side] for k in others))
+                       for side in (SIDE_OLD, SIDE_NEW)})
     checked = found = elsewhere = 0
     for entry in item.get("value_changes") or []:
         for side, part in value_change_sides(str(entry)):

@@ -587,11 +587,15 @@ def _one_sided_docs(side: str) -> tuple[dict, dict]:
     return ((empty, docs["new"]) if side == "new" else (docs["old"], empty))
 
 
+#: What ``tables_diff`` calls a table that has only the one side.
+ONE_KIND = {"new": "new", "old": "removed"}
+
+
 def _one_sided_chapter(side: str, extra: list[dict] | None = None) -> dict:
     """The chapter of :func:`_one_sided_docs`: one ``tables_diff`` entry, one side."""
     ch = _chapter()
-    ch["tables_diff"] = [{"kind": side, side: ONE_ID[side], "caption": ONE_CAPTION}] \
-        + (extra or [])
+    ch["tables_diff"] = [{"kind": ONE_KIND[side], side: ONE_ID[side],
+                          "caption": ONE_CAPTION}] + (extra or [])
     return ch
 
 
@@ -619,7 +623,7 @@ def test_a_new_table_searches_both_arrow_sides_on_its_own_side():
 def test_a_removed_table_searches_both_arrow_sides_on_its_own_side():
     """The mirror case: a table the new edition dropped has only its old side."""
     entry = _one_sided_entry(side="old")
-    res = _check(entry, _one_sided_chapter("removed"), _one_sided_docs("old"))
+    res = _check(entry, _one_sided_chapter("old"), _one_sided_docs("old"))
     assert (res["values_checked"], res["values_found"]) == (2, 2)
     assert res["values_ok"] is True
 
