@@ -8,6 +8,35 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **The replay driver replays the run instead of continuing it.** `tools/replay.py`
+  recomputes the deterministic stages of a finished run over its frozen `norm_doc.json`
+  — it is the instrument every change has been measured with since the first work
+  package. It started from the wrong state: the mapping stage materializes the titles of
+  absorbed old sections as paragraphs and writes them back into `alt/norm_doc.json`, so a
+  finished run carries them. Recomputing over them let those paragraphs take part in the
+  similarity computation a second time; a different set of sections was absorbed, new
+  synthetic paragraphs appeared, and the result was a run continued by one pass rather
+  than reproduced.
+  - The copy is now put back to the state the replay claims to start from: every
+    paragraph flagged `synthetic_title` is removed from both documents before the stages
+    run (`strip_synthetic_paragraphs`). They carry nothing but the section title, and the
+    mapping stage creates them again — verified identical on thirteen reference runs. A
+    document without them keeps its bytes.
+  - Replaying a replay is now byte-identical over all eight compared artifacts, measured
+    on five reference runs. The `moved` list matches the original element for element
+    wherever the reference was produced by the current code: 85, 115 and 29 moves — the
+    last one had been reported as 36. The chapter mapping matches everywhere (220 / 211 /
+    108 / 272 / 108 records).
+  - `--enrich` is fixed along with it. The enrichment stage used to run over the
+    synthetic paragraphs and fold them into the per-section aggregates, which a fresh run
+    never does, because enrichment precedes the mapping. A replay with `--enrich` is now
+    byte-identical to one without.
+  - Numbers quoted from replays made before this fix are on a different fixed point
+    wherever the absorbed set did not converge — the 439 moves in the entry below are one
+    such number; today the same run replays to 467, and its own frozen result is 299,
+    because that run predates the move rules of the current code. Every 4110 replay the
+    project ever made is unaffected.
+
 - **Both sides of a move are written down, also into and out of a chapter that has no
   counterpart.** A chapter mapping record of type `new` or `removed` got no `para_links`
   at all, so its paragraphs entered the document-wide move pass through a second route

@@ -27,9 +27,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _tool(name: str):
+    """Import a module from ``tools/`` -- the instance ``replay`` itself imports.
+
+    ``tools/`` is not a package, so every test module loading it by path would get an
+    instance of its own; ``replay.py`` does ``import regression`` and would then raise
+    an exception class that is not the one this module knows.
+    """
+    if name in sys.modules:
+        return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, ROOT / "tools" / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
-    sys.modules.setdefault(name, module)
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
