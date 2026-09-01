@@ -27,6 +27,11 @@ from scipy.optimize import linear_sum_assignment
 
 from ...text.textnorm import n3
 
+#: Marks a paragraph this stage inserted for the title of an absorbed section. Set by the
+#: mapping, never by ingest or enrich -- see :func:`build_section_mapping` for why the
+#: paragraph exists and :func:`strip_synthetic_paragraphs` for how it is taken back out.
+SYNTHETIC_FLAG = "synthetic_title"
+
 _STOP = {"und", "oder", "der", "die", "das", "des", "dem", "den", "ein", "eine", "einer",
          "von", "zur", "zum", "zu", "am", "im", "in", "an", "auf", "bei", "mit", "für",
          "durch", "als", "wie", "sowie", "auch", "nur", "sind", "ist", "wird", "werden",
@@ -226,12 +231,13 @@ def build_section_mapping(old_doc: dict, new_doc: dict, sim_backend,
             synth_id = f"{sec['id']}.p0"
             if any(p["id"] == synth_id for p in sec["paragraphs"]):
                 continue
-            sec["paragraphs"].insert(0, {
-                "id": synth_id, "n0": sec["title"], "n1": _n1(sec["title"]),
-                "kind": "term", "term_no": sec["id"], "tc": {"ins": 0, "del": 0},
-                "modality": "informativ", "modality_counts": {},
-                "refs_internal": [], "refs_external": [], "values": [],
-                "formulas": [], "figures": [], "synthetic_title": True})
+            para = {"id": synth_id, "n0": sec["title"], "n1": _n1(sec["title"]),
+                    "kind": "term", "term_no": sec["id"], "tc": {"ins": 0, "del": 0},
+                    "modality": "informativ", "modality_counts": {},
+                    "refs_internal": [], "refs_external": [], "values": [],
+                    "formulas": [], "figures": []}
+            para[SYNTHETIC_FLAG] = True
+            sec["paragraphs"].insert(0, para)
 
     # ---- Records ----------------------------------------------------------------
     # The mapping id is built from the section *positions*, not from the id strings:
@@ -274,6 +280,35 @@ def build_section_mapping(old_doc: dict, new_doc: dict, sim_backend,
                             "match_type": "new", "confidence": 0.0, "part_changed": False,
                             "mapping_id": mapping_id([], [nq[nj]])})
     return records
+
+
+def strip_synthetic_paragraphs(doc: dict) -> int:
+    """Remove the paragraphs this stage inserted into ``doc``; return how many.
+
+    The mapping writes ``alt/norm_doc.json`` back, so a finished run carries the
+    synthetic title paragraphs and the same artifact means two things depending on which
+    stage wrote it last. Anything that recomputes from a finished run has to put the
+    document back to the state before ``map`` -- otherwise the paragraphs take part in
+    the similarity computation a second time, a different set of sections gets absorbed,
+    and the run is continued instead of reproduced (AP-32, measured on ``60909_v2``:
+    29 moves became 36).
+
+    The function lives here and not in the tool that needs it, because the flag belongs
+    to the code that sets it (AP-33): ``replay.py`` was the first tool to recompute from
+    a finished run and will not be the last. It works on the document, never on a file;
+    reading and writing stays with the caller.
+
+    The sections themselves stay, even one that ends up without a paragraph: only the
+    mapping decides which sections exist.
+    """
+    removed = 0
+    for sec in doc.get("sections") or []:
+        paras = sec.get("paragraphs") or []
+        kept = [p for p in paras if not p.get(SYNTHETIC_FLAG)]
+        if len(kept) != len(paras):
+            removed += len(paras) - len(kept)
+            sec["paragraphs"] = kept
+    return removed
 
 
 def write_mapping(records: list[dict], out_path: str | Path, pair_label: str):

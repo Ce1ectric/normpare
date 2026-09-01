@@ -51,10 +51,6 @@ FROZEN = ("alt/norm_doc.json", "neu/norm_doc.json", "deutung.json", ".vec_cache.
 #: Everything except ``ingest``, ``enrich`` (already applied) and ``deutung`` (LLM).
 STAGES = ["map", "align", "synopse", "keywords", "report"]
 
-#: Marks a paragraph that ``build_section_mapping`` inserted for the title of an absorbed
-#: section. Set by the mapping stage, never by ingest or enrich.
-SYNTHETIC_FLAG = "synthetic_title"
-
 
 def stages(enrich: bool = False) -> list[str]:
     """The stages to recompute.
@@ -76,20 +72,16 @@ def _offline() -> None:
 def strip_synthetic_paragraphs(path: Path) -> int:
     """Remove the paragraphs ``map`` inserted into a finished run's document.
 
-    Returns how many were removed. The file is only rewritten when there was something
-    to remove, so a document without them keeps its bytes. The sections themselves stay,
-    even one that ends up without a paragraph -- only the mapping stage decides which
-    sections exist.
+    The file layer of :func:`normpare.stages.align.sections.strip_synthetic_paragraphs`,
+    which knows the flag because it sets it (AP-33): read, strip, write, report the
+    count. The file is only rewritten when there was something to remove, so a document
+    without them keeps its bytes.
     """
+    from normpare.stages.align.sections import strip_synthetic_paragraphs as strip_doc
+
     target = regression.guard_write(path)
     doc = json.loads(target.read_text(encoding="utf-8"))
-    removed = 0
-    for sec in doc.get("sections") or []:
-        paras = sec.get("paragraphs") or []
-        kept = [p for p in paras if not p.get(SYNTHETIC_FLAG)]
-        if len(kept) != len(paras):
-            removed += len(paras) - len(kept)
-            sec["paragraphs"] = kept
+    removed = strip_doc(doc)
     if removed:
         # same shape as ``pipeline._write`` -- the stages rewrite the file anyway
         target.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
