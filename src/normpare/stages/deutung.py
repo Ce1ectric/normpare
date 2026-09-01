@@ -1114,6 +1114,10 @@ def _cell_keys(table: dict | None) -> set[tuple[str, str]]:
     Reads the ``cell_values`` written by the enrichment since AP-31 and computes them on
     the fly where the field is absent, so a ``norm_doc.json`` from an earlier run is
     checked exactly like a current one instead of counting as unchecked.
+
+    A document enriched between AP-31 and AP-33 carries the field **without** the unitless
+    values of AP-34; it is read as it stands. Such a run measures conservatively -- more
+    checked than found -- but it never reports a hit that is not in the file.
     """
     if not table:
         return set()
@@ -1140,7 +1144,11 @@ def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict,
     ``values_checked``
         how many values were recognized in ``value_changes``. An entry without a
         recognizable number ("Zeile entfällt") has nothing to check, and that is no
-        error -- it is counted as 0, not as a failure.
+        error -- it is counted as 0, not as a failure. Read with the rules of a table
+        cell since AP-34 (:func:`~normpare.stages.enrich.values.extract_cell_values`):
+        the statement describes a **table**, so its numbers carry their context in the
+        column heading exactly like the cells they are checked against. Reading it as
+        running text would leave "Dämpfung ≥0,06" without anything to look for.
     ``values_found``
         how many of them appear in the cells of their edition **of the named table**.
     ``values_ok``
@@ -1173,7 +1181,7 @@ def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict,
     checked = found = elsewhere = 0
     for entry in item.get("value_changes") or []:
         for side, part in value_change_sides(str(entry)):
-            for v in values.extract_values(n1(part)):
+            for v in values.extract_cell_values(n1(part)):
                 checked += 1
                 key = (v["base_unit"], v["base_value"])
                 if key in named[side]:

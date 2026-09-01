@@ -1,10 +1,14 @@
 """
 values.py -- parameters/limits as VALUES (Decimal), not strings.
 
-Captures: sign, decimal comma/point, thousands separators, exponents,
-comparison operators (<= < >= > =), tolerances (+/-), ranges ("10 bis 20 kV",
-"10...20 kV", "10-20 kV") and units including SI-prefix normalization
-(950 kW == 0.95 MW).
+Captures: sign, decimal comma/point, thousands separators (dot and space),
+exponents, comparison operators (<= < >= > =), tolerances (+/-), ranges
+("10 bis 20 kV", "10...20 kV", "10-20 kV") and units including SI-prefix
+normalization (950 kW == 0.95 MW).
+
+Two functions, on purpose: `extract_values` reads running text and needs a unit,
+`extract_cell_values` reads a table cell, where the unit stands in the column
+heading and the cell carries the bare number (AP-34).
 """
 from __future__ import annotations
 import re
@@ -32,7 +36,13 @@ _PREFIX = {"G": Decimal(1e9), "M": Decimal(1e6), "k": Decimal(1e3),
 _BASE_UNITS = {"var", "VA", "Wh", "W", "V", "A", "Hz", "s", "m", "Ω", "F", "H"}
 
 _UNIT_RE = "|".join(re.escape(u) for u in _UNITS)
-_NUM = r"[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?|[+-]?\d+(?:[.,]\d+)?(?:\s?[·x]\s?10[⁻\-]?\d+)?"
+# The thousands separator is a dot or a space (AP-34). "1 000 ms" used to read "000 ms"
+# = 0 -- silently wrong rather than missing, and the docstring promised otherwise.
+# Exactly three digits behind the separator and no further digit behind them, so that
+# "1 0000" is not pulled together. A protected space never reaches this point: every
+# production path runs the text through textnorm.n1 first, which turns it into a plain one.
+_NUM = (r"[+-]?\d{1,3}(?:[. ]\d{3})+(?!\d)(?:,\d+)?"
+        r"|[+-]?\d+(?:[.,]\d+)?(?:\s?[·x]\s?10[⁻\-]?\d+)?")
 _OP = r"(?:≤|≥|<=|>=|<|>|=|±|kleiner(?:\s+gleich)?|größer(?:\s+gleich)?|höchstens|mindestens|maximal|minimal|bis zu)"
 
 VALUE_RE = re.compile(
@@ -96,13 +106,63 @@ def extract_values(text: str) -> list[dict]:
     return out
 
 
+#: A number with a decimal place, with an optional operator in front and **no** unit
+#: behind it -- the form a limit value takes in a table cell (AP-34, variant B of the
+#: decision gate). The decimal place is what separates a limit value from a row number:
+#: taking every bare number would have added 1115 one- and two-digit integers to the new
+#: 4110 edition alone, against 374 for this rule, and none of those 374 is an ordinal.
+_DECIMAL = r"[+-]?\d{1,3}(?:[. ]\d{3})+(?!\d),\d+|[+-]?\d+,\d+(?:\s?[·x]\s?10[⁻\-]?\d+)?"
+
+BARE_VALUE_RE = re.compile(rf"(?P<op>{_OP})?\s*(?P<num>{_DECIMAL})")
+
+
+def extract_cell_values(text: str) -> list[dict]:
+    """All values of a table **cell**: those of :func:`extract_values` plus bare numbers.
+
+    In a table the unit stands in the column heading and the cell carries the number
+    alone -- "Dämpfungsmaß" over "≥ 0,06", "c" over "1,10". :func:`extract_values` demands
+    a unit and misses exactly those, and with them the parameters a table exists for.
+
+    Deliberately a function of its own instead of a flag inside :func:`extract_values`:
+    the cell carries its context in the column heading, running text does not, where
+    "0,06" without a unit is usually a chapter number or a list marker. Paragraph
+    enrichment cannot reach the wider rule, and ``paragraphs[].values``, the paragraph
+    diff, ``kennwert_changes`` and the synopsis stay as they are.
+
+    A bare number is only taken where no value with a unit already covers it, so
+    "≤ 500 kW" stays one value and does not become two. It carries ``unit`` and
+    ``base_unit`` as ``None``, which makes it distinguishable from a value with a unit and
+    -- through the unchanged comparison key ``(base_unit, base_value)`` -- pairable only
+    with another unitless value, never with "0,06 s".
+
+    The extra hits come after the values with a unit, in the order the text yields them.
+    """
+    text = text or ""
+    out = extract_values(text)
+    taken = [m.span() for m in VALUE_RE.finditer(text)]
+    for m in BARE_VALUE_RE.finditer(text):
+        start, end = m.span("num")
+        if any(start < hi and lo < end for lo, hi in taken):
+            continue
+        v = _parse_num(m.group("num"))
+        if v is None:
+            continue
+        out.append({"op": _OP_CANON.get((m.group("op") or "").strip().lower(),
+                                        m.group("op")),
+                    "value": str(v), "unit": None,
+                    "base_value": str(v.normalize()), "base_unit": None,
+                    "raw": m.group(0).strip()})
+    return out
+
+
 def cell_values(cells) -> list[dict]:
     """The values of a table's cells: ``[{row, col, values}]``, one record per cell.
 
-    The same function and the same normal form the paragraph text runs through
-    (:func:`extract_values` over ``n1``), so a limit value in a cell comes out as the
-    identical record it would produce in running text -- otherwise the two halves of the
-    inventory could not be compared with each other.
+    The same normal form the paragraph text runs through (``n1``), so a limit value in a
+    cell comes out as the record it would produce in running text -- otherwise the two
+    halves of the inventory could not be compared with each other. Since AP-34 through
+    :func:`extract_cell_values`, which additionally takes the bare number whose unit
+    stands in the column heading; a value with a unit is unaffected by that.
 
     Only cells that carry a value get a record. Empty and purely textual cells produce
     nothing: a record per cell would repeat the whole matrix, and the length of this list
@@ -112,18 +172,22 @@ def cell_values(cells) -> list[dict]:
     out = []
     for r, row in enumerate(cells or []):
         for c, cell in enumerate(row or []):
-            found = extract_values(n1(cell or ""))
+            found = extract_cell_values(n1(cell or ""))
             if found:
                 out.append({"row": r, "col": c, "values": found})
     return out
 
 
-def value_keys(records) -> set[tuple[str, str]]:
+def value_keys(records) -> set[tuple[str | None, str]]:
     """``(base_unit, base_value)`` of every value in ``[{row, col, values}]`` records.
 
     The comparison key of a value, deliberately without the operator: a cell reads
     "≤ 500 kW" where an interpretation says "500 kW -> 400 kW", and demanding the same
     operator would fail a value that is demonstrably present.
+
+    The unit stays in the key, and ``None`` is a unit in it like any other -- one that
+    equals only itself (AP-34). A damping factor of 0,06 must not confirm a claim about
+    0,06 seconds.
     """
     return {(v["base_unit"], v["base_value"])
             for rec in records or [] for v in rec.get("values") or []}

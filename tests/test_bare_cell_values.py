@@ -236,17 +236,17 @@ def test_statistics_count_the_new_values(tmp_path):
     """``cell_values_unexamined`` rises by exactly the values the cells gained.
 
     The number keeps its meaning -- how many cell values no deterministic stage compared
-    -- so the jump has to be explainable, not surprising: two damping factors per
-    edition on top of the two percentages.
+    -- so the jump has to be explainable, not surprising: two damping factors per edition
+    on top of the three values with a unit (2 MW, 10 %, 20 %).
     """
     old_doc, new_doc = _doc("alt_tab_1"), _doc("neu_tab_1")
     res = build_statistics(old_doc, new_doc, _synopse(), tmp_path / "statistics.json")
-    assert res["comparison"]["cell_values_unexamined"] == {"old": 4, "new": 4, "total": 8}
+    assert res["comparison"]["cell_values_unexamined"] == {"old": 5, "new": 5, "total": 10}
 
     pre = build_statistics(_doc("alt_tab_1", pre_ap34=True),
                            _doc("neu_tab_1", pre_ap34=True),
                            _synopse(), tmp_path / "vorher.json")
-    assert pre["comparison"]["cell_values_unexamined"] == {"old": 2, "new": 2, "total": 4}
+    assert pre["comparison"]["cell_values_unexamined"] == {"old": 3, "new": 3, "total": 6}
 
 
 def test_the_bare_value_of_a_cell_is_checked(tmp_path):
@@ -268,11 +268,20 @@ def test_the_bare_value_of_a_cell_is_checked(tmp_path):
 
 
 def test_a_unitless_claim_does_not_match_a_cell_with_a_unit():
-    """The separation holds where it costs: "0,06" is not confirmed by "0,06 s"."""
-    doc = _doc("neu_tab_1")
-    doc["sections"][0]["tables"][0]["cells"] = [["Zeit"], ["0,06 s"]]
-    doc["sections"][0]["tables"][0]["cell_values"] = cell_values([["Zeit"], ["0,06 s"]])
-    res = _check(_entry(value_changes=["Dämpfung ≥0,06"]), _doc("alt_tab_1"), doc)
+    """The separation holds where it costs: "0,06" is not confirmed by "0,06 s".
+
+    Both editions carry the seconds table here -- the statement has no arrow, so it is
+    looked for on both sides, and a single cell with the bare number anywhere would make
+    the test pass for the wrong reason.
+    """
+    seconds = [["Zeit"], ["0,06 s"]]
+    docs = []
+    for tid in ("alt_tab_1", "neu_tab_1"):
+        doc = _doc(tid)
+        doc["sections"][0]["tables"][0]["cells"] = seconds
+        doc["sections"][0]["tables"][0]["cell_values"] = cell_values(seconds)
+        docs.append(doc)
+    res = _check(_entry(value_changes=["Dämpfung ≥0,06"]), *docs)
     assert (res["values_checked"], res["values_found"]) == (1, 0)
 
 
