@@ -16,7 +16,8 @@ from collections import Counter
 from pathlib import Path
 from typing import NamedTuple, Protocol, runtime_checkable
 
-from ..text.textnorm import n2, split_sentences
+from ..text.textnorm import n1, n2, split_sentences
+from .enrich import values
 
 SEMANTIC_LABELS = ["equivalent", "clarified", "extended", "restricted",
                    "new_obligation", "removed_obligation", "moved", "optional",
@@ -337,6 +338,7 @@ CHAPTER_SCHEMA_DOC = """{
 ASSET_SCHEMA_DOC = """,
  "tables": [
    {"table": "<short caption/name of the table>",
+    "table_ref": "<the table id exactly as shown above, e.g. ..._tab_017 -- the id, not the caption>",
     "status": "changed|new|removed",
     "change": "1-2 sentences: which rows/values/limits change (be concrete)",
     "value_changes": ["concrete value change(s) old->new, e.g. 'droop: 5 % -> 4 %'; [] if none"],
@@ -378,10 +380,14 @@ PIPELINE_OWNED_INTERPRETATION = ("evidence_ok", "evidence_strict", "evidence_mat
                                  "change_index_best", "change_index_disputed",
                                  "structural_operation")
 
-#: Pipeline-owned fields of a table or figure interpretation.
+#: Pipeline-owned fields of a table or figure interpretation. ``table_id`` is the join
+#: the pipeline resolves from what the answer names (AP-31): the model says which table
+#: it means, the pipeline decides which table that is. A model-supplied id would be an
+#: assertion nothing checks -- exactly the class of error ``section_id`` was.
 PIPELINE_OWNED_ASSET = ("evidence_ok", "evidence_strict", "evidence_match_chars",
                         "evidence_fragments", "evidence_unique",
-                        "evidence_span", "evidence_extraction")
+                        "evidence_span", "evidence_extraction",
+                        "table_id", "values_checked", "values_found", "values_ok")
 
 
 def drop_pipeline_owned(obj: dict, fields=PIPELINE_OWNED_INTERPRETATION) -> dict:
@@ -940,6 +946,11 @@ def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict,
     tlines = []
     for td in ch.get("tables_diff") or []:
         cap = (td.get("caption") or "").strip() or "(ohne Caption)"
+        # AP-31: the id leads, the caption follows. A caption is free text and no key --
+        # measured over the three reference runs it joins 70 % / 68 % / 0 % of the table
+        # interpretations, and what the remainder measures is the text rule, not the data.
+        tid = table_key(td) or "(ohne Id)"
+        cap = f"{tid} — {cap}"
         kind = td.get("kind")
         if kind == "matched":
             if td.get("identical"):
@@ -984,7 +995,7 @@ def chapter_assets_block(ch: dict, o_secs: dict, n_secs: dict,
     block = ["", "TABELLEN & BILDER (Struktur-Extrakt — enthält Kennwerte/Grenzwerte; "
              "für die Deutung berücksichtigen):"]
     if tlines:
-        block += [" TABELLEN:"] + tlines
+        block += [" TABELLEN (je Zeile: Id — Beschriftung; in 'table' die Id nennen):"] + tlines
     if flines:
         block += [" BILDER:"] + flines
     s = "\n".join(block)
@@ -1026,6 +1037,137 @@ def asset_haystack(ch: dict, o_secs: dict, n_secs: dict) -> str:
 def check_asset_evidence(item: dict, hay: str) -> dict:
     """Evidence guard for table/figure interpretations, see :func:`check_evidence`."""
     return _guarded(item.get("evidence") or "", hay, _asset_evidence_ok)
+
+
+# ------------------------------------------------------------------ values in cells
+# AP-31. The evidence guard checks the *quote* of a table interpretation; the values in
+# its ``value_changes`` were checked by nobody -- 138 / 97 / 6 statements over the three
+# reference runs against 9 / 8 / 0 the deterministic stage knows. They are checked here
+# against the cells of the table the entry names, and the result is written on the entry.
+# Marked, never corrected (AP-07, AP-29): the text stays as delivered.
+
+def table_key(td: dict) -> str | None:
+    """The id a table diff entry is addressed by: the new side, else the old one.
+
+    One identity per table, so an entry can name it with a single string. For a pair
+    both cells sets are reachable from the entry (see :func:`check_asset_values`).
+    """
+    return td.get("new") or td.get("old")
+
+
+def _norm_caption(text) -> str:
+    """A caption reduced to case and whitespace -- the pre-AP-31 join, nothing more."""
+    return " ".join(str(text or "").split()).lower()
+
+
+def resolve_table(item: dict, ch: dict) -> dict | None:
+    """The ``tables_diff`` entry a table interpretation names, ``None`` if none.
+
+    Since AP-31 the prompt names the table by its id and the schema asks for that id back
+    in ``table_ref``, so the join is an identity comparison and not a text rule. ``table``
+    keeps the caption: it is what the deliverables print, and an id is not a name.
+
+    The caption remains a **fallback**, and only as an exact match after normalizing case
+    and whitespace, and only when it is unique in the chapter: answers cached before
+    AP-31 carry no ``table_ref``, and dropping them would make every earlier run
+    unmeasurable. A caption that fits two tables resolves to neither -- an ambiguous join
+    would put the check on a table the entry may not mean.
+    """
+    named = str(item.get("table_ref") or item.get("table") or "").strip()
+    tds = ch.get("tables_diff") or []
+    if not named or not tds:
+        return None
+    for td in tds:
+        key = table_key(td)
+        if key and (named == key or key in named):
+            return td
+    norm = _norm_caption(named)
+    hits = [td for td in tds if norm and _norm_caption(td.get("caption")) == norm]
+    return hits[0] if len(hits) == 1 else None
+
+
+#: What a model writes between the old and the new value of a change.
+_VALUE_ARROW = re.compile(r"\s*(?:-+>|=+>|→|➔|➝|»)\s*")
+
+#: Sides a value in a ``value_changes`` entry is looked for on.
+SIDE_OLD, SIDE_NEW, SIDE_BOTH = "old", "new", "both"
+
+
+def value_change_sides(text: str) -> list[tuple[str, str]]:
+    """Split one ``value_changes`` entry into ``(side, text)`` pairs.
+
+    ``"droop: 5 % -> 4 %"`` yields the old and the new side, and each is then looked for
+    in the cells of *its* edition. Without an arrow the entry says nothing about which
+    edition it describes ("Zeile für 0,85 Un entfernt"), so the value is looked for on
+    both sides: charging it to one of them would fail a value that is demonstrably there.
+    """
+    parts = _VALUE_ARROW.split(text or "", maxsplit=1)
+    if len(parts) == 2:
+        return [(SIDE_OLD, parts[0]), (SIDE_NEW, parts[1])]
+    return [(SIDE_BOTH, text or "")]
+
+
+def _cell_keys(table: dict | None) -> set[tuple[str, str]]:
+    """``(base_unit, base_value)`` of every value in a table's cells.
+
+    Reads the ``cell_values`` written by the enrichment since AP-31 and computes them on
+    the fly where the field is absent, so a ``norm_doc.json`` from an earlier run is
+    checked exactly like a current one instead of counting as unchecked.
+    """
+    if not table:
+        return set()
+    recs = table.get("cell_values")
+    if recs is None:
+        recs = values.cell_values(table.get("cells"))
+    return values.value_keys(recs)
+
+
+def check_asset_values(item: dict, td: dict | None, o_tabs: dict, n_tabs: dict) -> dict:
+    """Check the values of a table interpretation against the cells of its table.
+
+    Returns the four fields written onto the entry:
+
+    ``table_id``
+        the table the entry was joined to, ``None`` when it names none.
+    ``values_checked``
+        how many values were recognized in ``value_changes``. An entry without a
+        recognizable number ("Zeile entfällt") has nothing to check, and that is no
+        error -- it is counted as 0, not as a failure.
+    ``values_found``
+        how many of them appear in the cells of their edition.
+    ``values_ok``
+        whether all recognized values were found.
+
+    All three counts are ``None`` when no table could be joined: such an entry is
+    reported as **unchecked**, never as wrong. Counting it as a failure would measure the
+    join instead of the statement.
+    """
+    if td is None:
+        return {"table_id": None, "values_checked": None, "values_found": None,
+                "values_ok": None}
+    old_keys = _cell_keys(o_tabs.get(td.get("old")))
+    new_keys = _cell_keys(n_tabs.get(td.get("new")))
+    haystacks = {SIDE_OLD: old_keys, SIDE_NEW: new_keys, SIDE_BOTH: old_keys | new_keys}
+    checked = found = 0
+    for entry in item.get("value_changes") or []:
+        for side, part in value_change_sides(str(entry)):
+            for v in values.extract_values(n1(part)):
+                checked += 1
+                if (v["base_unit"], v["base_value"]) in haystacks[side]:
+                    found += 1
+    return {"table_id": table_key(td), "values_checked": checked,
+            "values_found": found, "values_ok": found == checked}
+
+
+#: Why a table or figure interpretation needs a human look. ``evidence_ok`` is the
+#: historical trigger and keeps its meaning; ``values_ok`` is added by AP-31 and fires
+#: only on a **checked** entry -- an unchecked one is not a failure.
+ASSET_REVIEW_REASONS = ("evidence_ok", "values_ok")
+
+
+def asset_review_reasons(item: dict) -> list[str]:
+    """The reasons a table or figure interpretation is in the review queue."""
+    return [r for r in ASSET_REVIEW_REASONS if item.get(r) is False]
 
 
 #: Separators a rendered table row is built from -- see :func:`_render_cells`.
@@ -2126,6 +2268,7 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     n_extra = 0                    # ... and how many requests that cost on top
     n_collisions = 0               # two blocks claiming the same change index
     n_repaired = 0                 # answers only readable with the lenient parse
+    unjoined = 0                   # table interpretations naming no table of their chapter
     for ch, cid, mid, tags, parts, old_x, new_x in jobs:
         # one chapter, one interpretation -- however many requests it took to get it
         data, _sel, collisions = merge_chapter_answers(
@@ -2182,10 +2325,18 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
             # table/figure interpretations: check evidence against cells/captions
             if data.get("tables") or data.get("figures"):
                 hay = asset_haystack(ch, o_secs, n_secs)
+                o_tabs, n_tabs = _tabmap(o_secs), _tabmap(n_secs)
                 for kind in ("tables", "figures"):
                     for a in (data.get(kind) or []):
                         drops.update(drop_pipeline_owned(a, PIPELINE_OWNED_ASSET).keys())
                         a.update(check_asset_evidence(a, hay))
+                        if kind == "tables":
+                            # AP-31: the values the entry claims, checked against the
+                            # cells of the table it names -- marked, never corrected
+                            a.update(check_asset_values(a, resolve_table(a, ch),
+                                                        o_tabs, n_tabs))
+                            if a["values_ok"] is None:
+                                unjoined += 1
                         candidates.append(({"section_id": cid, "mapping_id": mid,
                                             "asset": kind[:-1]}, a))
         # Which chapter this answer belongs to is decided here, not in the answer: the
@@ -2232,9 +2383,10 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     review = []
     for where, record in candidates:
         if "asset" in where:
-            # a table or figure has no axes and no change index; its only trigger is
-            # the quote, exactly as before
-            reasons = [] if record["evidence_ok"] else ["evidence_ok"]
+            # a table or figure has no axes and no change index; its triggers are the
+            # quote, as before, and since AP-31 the values it claims -- the latter only
+            # where they could be checked at all
+            reasons = asset_review_reasons(record)
         else:
             reasons = _review_reasons(record)
         if reasons:
@@ -2253,6 +2405,14 @@ def run_deutung(synopse: dict, old_doc: dict, new_doc: dict, root: Path, out_dir
     # ... including what the provider thought although it was told not to (AP-27)
     n_reasoning = getattr(answer_source, "n_reasoning", 0)
     feedback += answer_feedback(len(results), n_llm, lost, n_reasoning)
+    # ... and which value statements nobody could check, because the entry names no table
+    # of its chapter (AP-31). Unchecked, not wrong: a number that counted them as failures
+    # would measure the join instead of the statement.
+    if unjoined:
+        feedback.append({"section_id": None, "phase": "deutung", "field": "value_changes",
+                         "count": unjoined,
+                         "finding": (f"{unjoined} table interpretation(s) name no table of "
+                                     f"their chapter; their value changes are unchecked")})
     # ... and how much of the material carries an interpretation at all (AP-19)
     # ... measured against every change of the comparison, the chapters left out of the
     # scope included: their changes carry no interpretation either, and a base that hides

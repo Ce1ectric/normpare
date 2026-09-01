@@ -96,6 +96,39 @@ def extract_values(text: str) -> list[dict]:
     return out
 
 
+def cell_values(cells) -> list[dict]:
+    """The values of a table's cells: ``[{row, col, values}]``, one record per cell.
+
+    The same function and the same normal form the paragraph text runs through
+    (:func:`extract_values` over ``n1``), so a limit value in a cell comes out as the
+    identical record it would produce in running text -- otherwise the two halves of the
+    inventory could not be compared with each other.
+
+    Only cells that carry a value get a record. Empty and purely textual cells produce
+    nothing: a record per cell would repeat the whole matrix, and the length of this list
+    is exactly the number that matters (AP-31).
+    """
+    from ...text.textnorm import n1
+    out = []
+    for r, row in enumerate(cells or []):
+        for c, cell in enumerate(row or []):
+            found = extract_values(n1(cell or ""))
+            if found:
+                out.append({"row": r, "col": c, "values": found})
+    return out
+
+
+def value_keys(records) -> set[tuple[str, str]]:
+    """``(base_unit, base_value)`` of every value in ``[{row, col, values}]`` records.
+
+    The comparison key of a value, deliberately without the operator: a cell reads
+    "≤ 500 kW" where an interpretation says "500 kW -> 400 kW", and demanding the same
+    operator would fail a value that is demonstrably present.
+    """
+    return {(v["base_unit"], v["base_value"])
+            for rec in records or [] for v in rec.get("values") or []}
+
+
 def _key(rec: dict) -> tuple:
     return (rec["base_unit"], rec["base_value"], rec.get("base_value2"), rec.get("op"))
 

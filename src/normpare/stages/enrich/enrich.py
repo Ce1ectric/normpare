@@ -4,6 +4,7 @@ enrich.py -- stage S2: enrichment of norm_doc.json.
 Per paragraph: N1/N2/N3 normal forms (only N1 is stored, N2/N3 on the fly), modality
 per sentence (max + counts), internal/external references, parameter values.
 Per section: aggregated modality counts, reference and value collection.
+Per table: the values of every cell that carries one (AP-31).
 """
 from __future__ import annotations
 import json
@@ -32,6 +33,12 @@ def enrich_doc(norm_doc_path: str | Path) -> dict:
                 sec_mod[k] = sec_mod.get(k, 0) + v
             sec_refs_i.update(par["refs_internal"])
             sec_refs_e.update(par["refs_external"])
+        # AP-31: the cells carry their values too. Until then the value detection ran over
+        # paragraph text only, and a limit value in a table cell was invisible to the
+        # deterministic stage in every run -- in the new 4110 edition that is 532 of 1461
+        # values. Additive: nothing above this line reads the field.
+        for tab in sec.get("tables") or []:
+            tab["cell_values"] = values.cell_values(tab.get("cells"))
         sec["modality_counts"] = sec_mod
         sec["refs_internal"] = sorted(sec_refs_i)
         sec["refs_external"] = sorted(sec_refs_e)

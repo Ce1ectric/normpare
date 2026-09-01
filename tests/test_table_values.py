@@ -94,7 +94,7 @@ def _synopse() -> dict:
 
 
 def _table_entry(**over) -> dict:
-    d = {"table": NEW_TABLE_ID, "status": "changed",
+    d = {"table": CAPTION, "table_ref": NEW_TABLE_ID, "status": "changed",
          "change": "Der Grenzwert der Wirkleistung sinkt.",
          "value_changes": ["Wirkleistung: 500 kW -> 400 kW"],
          "impact": "Kleinere Anlagen betroffen.",
@@ -159,7 +159,8 @@ def test_table_cells_carry_values(tmp_path):
     assert tab["cell_values"] == [{"row": 0, "col": 1,
                                    "values": extract_values("≤ 500 kW")}]
     rec = tab["cell_values"][0]["values"][0]
-    assert (rec["op"], rec["base_value"], rec["base_unit"]) == ("<=", "500000", "W")
+    # the normal form of the paragraph path, down to Decimal.normalize()'s exponent
+    assert (rec["op"], rec["base_value"], rec["base_unit"]) == ("<=", "5E+5", "W")
 
 
 def test_a_cell_without_a_value_carries_none(tmp_path):
@@ -234,25 +235,35 @@ def test_the_asset_prompt_names_the_table_id(tmp_path):
     block = chapter_assets_block(_chapter(), o_secs, n_secs)
     assert NEW_TABLE_ID in block
     assert CAPTION in block                      # the caption stays, it is readable
-    assert "table id" in ASSET_SCHEMA_DOC or "Tabellen-Id" in ASSET_SCHEMA_DOC
+    assert '"table_ref"' in ASSET_SCHEMA_DOC and "table id" in ASSET_SCHEMA_DOC
 
     user, _sel = build_chapter_prompt(_chapter(), OLD_TEXT, NEW_TEXT, o_secs, n_secs)
     assert NEW_TABLE_ID in user
 
 
 def test_the_table_id_is_pipeline_owned(tmp_path):
-    """``table_id`` from a model answer is discarded; the pipeline resolves it itself."""
+    """``table_id`` from a model answer is discarded; the pipeline resolves it itself.
+
+    The model says which table it means (``table_ref``), the pipeline decides which table
+    that is. An id taken from the answer would be an assertion nothing checks -- the very
+    error class ``section_id`` was in AP-06.
+    """
     assert "table_id" in PIPELINE_OWNED_ASSET
-    supplied = {"table_id": "erfunden_tab_999", "table": NEW_TABLE_ID}
+    supplied = {"table_id": "erfunden_tab_999", "table_ref": NEW_TABLE_ID}
     assert drop_pipeline_owned(supplied, PIPELINE_OWNED_ASSET) == \
         {"table_id": "erfunden_tab_999"}
 
     out = _run(tmp_path, _answer(tables=[_table_entry(table_id="erfunden_tab_999")]))
     stored = _stored_table(out)
     assert stored["table_id"] == NEW_TABLE_ID
+    assert stored["table"] == CAPTION             # the caption stays readable in reports
     assert table_key(_tables_diff()[0]) == NEW_TABLE_ID
     dropped = [f for f in out["pipeline_feedback"] if f.get("field") == "table_id"]
     assert dropped and dropped[0]["count"] == 1
+
+    # an answer from before AP-31 carries no table_ref: its unique caption still joins
+    old_style = {"table": CAPTION, "value_changes": []}
+    assert table_key(resolve_table(old_style, _chapter())) == NEW_TABLE_ID
 
 
 # -- part C: every value change is checked against the cells -----------------------------
@@ -297,7 +308,8 @@ def test_an_unjoinable_entry_is_reported_as_unchecked(tmp_path):
 
     Counting it as a failure would measure the join instead of the statement.
     """
-    entry = _table_entry(table="Tabelle ohne Caption (Seite 12)")
+    entry = _table_entry(table="Tabelle ohne Caption (Seite 12)",
+                         table_ref="Tabelle ohne Caption (Seite 12)")
     out = _run(tmp_path, _answer(tables=[entry]))
     stored = _stored_table(out)
     assert stored["table_id"] is None

@@ -35,7 +35,23 @@ def doc_stats(doc: dict) -> dict:
             "top_external_refs": ext_refs.most_common(25)}
 
 
-def pair_stats(synopse: dict) -> dict:
+def cell_values_total(doc: dict | None) -> int:
+    """How many parameter values sit in the table cells of a document (AP-31).
+
+    Read from the ``cell_values`` the enrichment writes; a document from before AP-31
+    contributes 0 rather than a number computed on the fly -- the count says what *this*
+    document carries, and inventing it here would hide that it was never enriched.
+    """
+    n = 0
+    for s in (doc or {}).get("sections", []):
+        for t in s.get("tables") or []:
+            for rec in t.get("cell_values") or []:
+                n += len(rec.get("values") or [])
+    return n
+
+
+def pair_stats(synopse: dict, old_doc: dict | None = None,
+               new_doc: dict | None = None) -> dict:
     kinds = Counter()
     kennwert_changes = []
     mod_shifts = Counter()
@@ -58,9 +74,16 @@ def pair_stats(synopse: dict) -> dict:
             sh = (c.get("modality") or {}).get("shift")
             if sh and sh != "unveraendert":
                 mod_shifts[sh] += 1
+    # AP-31: kennwert_changes is and stays the value diff of the paragraph *text*. Beside
+    # it stands what nobody looked at: the values in table cells, which no deterministic
+    # stage compares. A 0 in kennwert_changes must never again be read as "no value
+    # changed" while twenty values sit in cells next to it (60909, both editions).
+    n_old, n_new = cell_values_total(old_doc), cell_values_total(new_doc)
     return {"change_kinds": dict(kinds),
             "n_chapters_with_changes": sum(1 for ch in synopse["chapters"] if ch["changes"]),
             "kennwert_changes": kennwert_changes,
+            "cell_values_unexamined": {"old": n_old, "new": n_new,
+                                       "total": n_old + n_new},
             "modality_shifts": dict(mod_shifts),
             "part_changed_chapters": part_changes,
             "part_changed_mapping_ids": part_changed_ids}
@@ -68,6 +91,6 @@ def pair_stats(synopse: dict) -> dict:
 
 def build_statistics(old_doc, new_doc, synopse, out_path: str | Path) -> dict:
     res = {"old": doc_stats(old_doc), "new": doc_stats(new_doc),
-           "comparison": pair_stats(synopse)}
+           "comparison": pair_stats(synopse, old_doc, new_doc)}
     Path(out_path).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     return res
