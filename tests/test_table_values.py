@@ -14,6 +14,11 @@ table and the result is written on the entry (part C), and the statistics say ho
 values were never examined (part D). Marked, never corrected -- an entry whose values are
 not found keeps its text and gains a reason in the review queue.
 
+AP-33 adds the grading the measurement asked for: a value that sits in a *neighbouring*
+table of the same chapter is something else than a value that sits nowhere (4120: 29 of
+30 unconfirmed values), and it is counted separately (``values_elsewhere``) and reported
+under its own, weaker reason -- without ever counting as found.
+
 Synthetic material throughout, no standard, no network.
 """
 from __future__ import annotations
@@ -23,9 +28,11 @@ import json
 from normpare.model.document import Table
 from normpare.report.stats import build_statistics
 from normpare.stages.deutung import (
+    ASSET_REVIEW_REASONS,
     ASSET_SCHEMA_DOC,
     PIPELINE_OWNED_ASSET,
     FixtureProvider,
+    asset_review_reasons,
     build_chapter_prompt,
     build_system_prompt,
     cache_key,
@@ -54,8 +61,9 @@ OLD_TEXT = "Die Anlage hält die Werte der Tabelle 3 ein."
 NEW_TEXT = "Die Anlage hält die Werte der Tabelle 3 jederzeit ein."
 
 
-def _table(tid: str, cells: list[list[str]], enriched: bool = True) -> dict:
-    t = {"id": tid, "caption": CAPTION, "cells": cells,
+def _table(tid: str, cells: list[list[str]], enriched: bool = True,
+           caption: str = CAPTION) -> dict:
+    t = {"id": tid, "caption": caption, "cells": cells,
          "n_rows": len(cells), "n_cols": len(cells[0]), "para_anchor": "1.p1"}
     if enriched:
         t["cell_values"] = cell_values(cells)
@@ -119,11 +127,11 @@ def _answer(**over) -> dict:
     return d
 
 
-def _run(tmp_path, answer: dict, old_doc=None, new_doc=None) -> dict:
+def _run(tmp_path, answer: dict, old_doc=None, new_doc=None, syn=None) -> dict:
     """Interpret the one chapter with a frozen answer -- no provider, no network."""
     old_doc = old_doc if old_doc is not None else _docs()[0]
     new_doc = new_doc if new_doc is not None else _docs()[1]
-    syn = _synopse()
+    syn = syn if syn is not None else _synopse()
     ch = syn["chapters"][0]
     o_secs = {s["id"]: s for s in old_doc["sections"]}
     n_secs = {s["id"]: s for s in new_doc["sections"]}
@@ -363,3 +371,194 @@ def test_kennwert_changes_are_unchanged(tmp_path):
     res = build_statistics(old_doc, new_doc, syn, tmp_path / "statistics.json")
     assert res["comparison"]["kennwert_changes"] == [
         {"chapter": "1", "mapping_id": "1<1", "old": "500 kW", "new": "400 kW"}]
+
+
+# -- AP-33: a value in the neighbouring table is not a value nowhere ---------------------
+
+SIB_OLD_ID, SIB_NEW_ID = "alt_tab_004", "neu_tab_004"
+SIB_CAPTION = "Tabelle 4 – Blindleistung am Netzanschlusspunkt"
+
+#: The sibling pair of the same chapter. "50 Hz" stands in the named table as well (a
+#: value found there must not be counted twice), "700 kW" only on the *new* side.
+SIB_OLD_CELLS = [["Parameter", "Wert"], ["Blindleistung", "300 kW"], ["Frequenz", "50 Hz"]]
+SIB_NEW_CELLS = [["Parameter", "Wert"], ["Blindleistung", "250 kW"],
+                 ["Reserve", "700 kW"], ["Frequenz", "50 Hz"]]
+
+#: A table of *another* chapter, carrying the value the entry claims.
+FOREIGN_ID = "neu_tab_009"
+FOREIGN_CELLS = [["Parameter", "Wert"], ["Blindleistung", "250 kW"]]
+
+
+def _sibling_docs() -> tuple[dict, dict]:
+    """The two documents with a second table in the same chapter."""
+    old_doc, new_doc = _docs()
+    old_doc["sections"][0]["tables"].append(
+        _table(SIB_OLD_ID, SIB_OLD_CELLS, caption=SIB_CAPTION))
+    new_doc["sections"][0]["tables"].append(
+        _table(SIB_NEW_ID, SIB_NEW_CELLS, caption=SIB_CAPTION))
+    return old_doc, new_doc
+
+
+def _foreign_docs() -> tuple[dict, dict]:
+    """The two documents with the claimed value in a table of a *different* chapter."""
+    old_doc, new_doc = _docs()
+    new_doc["sections"].append(
+        {"id": "2", "title": "Anhang", "level": 1, "part": "hauptteil",
+         "paragraphs": [{"id": "2.p1", "n0": "Anhang.", "n1": "anhang."}],
+         "tables": [_table(FOREIGN_ID, FOREIGN_CELLS, caption="Tabelle 9 – Anhang")],
+         "figures": [], "formulas": []})
+    return old_doc, new_doc
+
+
+def _sibling_chapter() -> dict:
+    """The chapter of :func:`_sibling_docs`: both table pairs in one ``tables_diff``."""
+    ch = _chapter()
+    ch["tables_diff"] = _tables_diff() + [
+        {"kind": "matched", "old": SIB_OLD_ID, "new": SIB_NEW_ID, "caption": SIB_CAPTION,
+         "identical": False, "rows_changed": 1, "confidence": 1.0}]
+    return ch
+
+
+def _check(entry: dict, ch: dict, docs: tuple[dict, dict]) -> dict:
+    """Run the value check of one table entry over a whole pair of documents."""
+    om, nm = ({t["id"]: t for s in doc["sections"] for t in s.get("tables") or []}
+              for doc in docs)
+    return check_asset_values(entry, resolve_table(entry, ch), om, nm,
+                              ch.get("tables_diff"))
+
+
+def test_a_value_in_a_sibling_table_is_counted_separately():
+    """A value of the neighbouring table is counted, but not as found.
+
+    4120 measured 29 of 30 unconfirmed values this way -- all in 10.2.5, where one
+    statement summarises several tables. That is a weaker proof, not a missing one, and
+    a list that cannot tell it from an invented number has to be read case by case.
+    """
+    entry = _table_entry(value_changes=["Zeile für Blindleistung 250 kW entfällt"])
+    res = _check(entry, _sibling_chapter(), _sibling_docs())
+    assert res["values_checked"] == 1
+    assert res["values_found"] == 0
+    assert res["values_elsewhere"] == 1
+
+
+def test_a_value_in_its_own_table_is_not_counted_as_elsewhere():
+    """A hit in the named table counts once, even when a sibling carries it too.
+
+    "50 Hz" stands in both tables of the chapter; counting it on both sides would let
+    ``values_found + values_elsewhere`` exceed ``values_checked``.
+    """
+    entry = _table_entry(value_changes=["Frequenz 50 Hz"])
+    res = _check(entry, _sibling_chapter(), _sibling_docs())
+    assert (res["values_checked"], res["values_found"], res["values_elsewhere"]) == (1, 1, 0)
+
+    both = _check(_table_entry(), _sibling_chapter(), _sibling_docs())
+    assert (both["values_checked"], both["values_found"], both["values_elsewhere"]) \
+        == (2, 2, 0)
+
+
+def test_values_ok_ignores_the_sibling_tables():
+    """``values_ok`` keeps its meaning: every recognised value in the *named* table.
+
+    The grading grows beside it, never inside it -- a sibling hit counted as a hit would
+    erase the difference between "checked" and "found somewhere".
+    """
+    entry = _table_entry(value_changes=["Zeile für Blindleistung 250 kW entfällt"])
+    res = _check(entry, _sibling_chapter(), _sibling_docs())
+    assert res["values_ok"] is False
+    assert res["values_ok"] == (res["values_found"] == res["values_checked"])
+    assert asset_review_reasons({**entry, **res}) == ["values_in_other_table"]
+
+
+def test_the_weaker_reason_fires_only_when_everything_is_accounted_for():
+    """One value nowhere in the chapter, and the entry is the serious case again."""
+    entry = _table_entry(value_changes=["Blindleistung: 999 kW -> 250 kW"])
+    res = _check(entry, _sibling_chapter(), _sibling_docs())
+    assert (res["values_checked"], res["values_found"], res["values_elsewhere"]) == (2, 0, 1)
+    assert asset_review_reasons({**entry, **res}) == ["values_ok"]
+
+
+def test_the_reasons_are_mutually_exclusive():
+    """No entry ever carries both value reasons, whatever the mixture of hits."""
+    assert ASSET_REVIEW_REASONS.index("values_in_other_table") > \
+        ASSET_REVIEW_REASONS.index("values_ok")
+    cases = ["Wirkleistung: 500 kW -> 400 kW",           # both in the named table
+             "Zeile für Blindleistung 250 kW entfällt",  # only in the sibling
+             "Blindleistung: 999 kW -> 250 kW",          # one nowhere, one in the sibling
+             "Wirkleistung: 500 kW -> 999 kW",           # one named, one nowhere
+             "Zeile entfällt"]                           # nothing to check
+    for text in cases:
+        entry = _table_entry(value_changes=[text])
+        record = {**entry, **_check(entry, _sibling_chapter(), _sibling_docs())}
+        reasons = set(asset_review_reasons(record))
+        assert not {"values_ok", "values_in_other_table"} <= reasons, text
+
+
+def test_the_sibling_search_stays_inside_the_chapter():
+    """A table of another chapter is not a sibling, however well the value fits.
+
+    The neighbourhood is the ``tables_diff`` of this mapping record. Searching the whole
+    document would find every percentage somewhere and would say nothing.
+    """
+    entry = _table_entry(value_changes=["Zeile für Blindleistung 250 kW entfällt"])
+    res = _check(entry, _chapter(), _foreign_docs())
+    assert (res["values_checked"], res["values_found"], res["values_elsewhere"]) == (1, 0, 0)
+    assert asset_review_reasons({**entry, **res}) == ["values_ok"]
+
+
+def test_an_unjoinable_entry_reports_none_for_elsewhere(tmp_path):
+    """Without a table there is no neighbourhood either: unchecked, not zero."""
+    entry = _table_entry(table="Tabelle ohne Caption (Seite 12)",
+                         table_ref="Tabelle ohne Caption (Seite 12)")
+    out = _run(tmp_path, _answer(tables=[entry]))
+    stored = _stored_table(out)
+    assert stored["values_elsewhere"] is None
+    assert stored["values_ok"] is None
+    assert not [e for e in out["review_queue"] if e.get("asset") == "table"]
+
+
+def test_the_side_choice_still_applies():
+    """Old value on the old side, new value on the new -- across the siblings as well.
+
+    "700 kW" stands in the *new* sibling only. Claimed as the old value it is not there,
+    and an entry without an arrow says nothing about its edition, so both sides count.
+    """
+    entry = _table_entry(value_changes=["Reserve: 700 kW -> 400 kW"])
+    res = _check(entry, _sibling_chapter(), _sibling_docs())
+    assert (res["values_checked"], res["values_found"], res["values_elsewhere"]) == (2, 1, 0)
+
+    no_arrow = _table_entry(value_changes=["Reserve 700 kW"])
+    res = _check(no_arrow, _sibling_chapter(), _sibling_docs())
+    assert (res["values_checked"], res["values_found"], res["values_elsewhere"]) == (1, 0, 1)
+
+
+def test_the_feedback_names_the_sibling_count(tmp_path):
+    """The run says how many values sat in a neighbouring table -- zero included.
+
+    A number that only appears in the failure case leaves the good case unmeasured
+    (AP-20, AP-28): without the zero nobody can tell "no summaries" from "not counted".
+    """
+    out = _run(tmp_path, _answer())
+    line = [f for f in out["pipeline_feedback"] if f.get("field") == "values_elsewhere"]
+    assert len(line) == 1 and line[0]["count"] == 0
+
+    syn = _synopse()
+    syn["chapters"][0] = _sibling_chapter()
+    entry = _table_entry(value_changes=["Zeile für Blindleistung 250 kW entfällt"])
+    old_doc, new_doc = _sibling_docs()
+    out = _run(tmp_path, _answer(tables=[entry]), old_doc, new_doc, syn)
+
+    assert _stored_table(out)["values_elsewhere"] == 1
+    line = [f for f in out["pipeline_feedback"] if f.get("field") == "values_elsewhere"]
+    assert len(line) == 1 and line[0]["count"] == 1
+    assert "1" in line[0]["finding"]
+
+    queued = [e for e in out["review_queue"] if e.get("asset") == "table"]
+    assert len(queued) == 1
+    assert queued[0]["review_reasons"] == ["values_in_other_table"]
+
+
+def test_values_elsewhere_is_pipeline_owned():
+    """The count is the pipeline's, like the three numbers it stands beside."""
+    assert "values_elsewhere" in PIPELINE_OWNED_ASSET
+    assert drop_pipeline_owned({"values_elsewhere": 7}, PIPELINE_OWNED_ASSET) == \
+        {"values_elsewhere": 7}
