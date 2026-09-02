@@ -321,7 +321,7 @@ CHAPTER_SCHEMA_DOC = """{
    {"change_index": <int, index from the change list>,
     "semantic_label": "equivalent|clarified|extended|restricted|new_obligation|removed_obligation|moved|optional|informative|contradictory",
     "obligation": "tightened|relaxed|unchanged",
-    "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction). For a change without a counterpart the axis describes what happens to the BODY OF STATEMENTS of the standard: newly added text is extended, text dropped without replacement is narrowed. If a specific successor or predecessor is recognisable elsewhere, answer replaced instead. A moved change is the same statement in a new place: the axis describes the TEXT, never the place (the place is structural). Unchanged moved text is equivalent; text reworded on the way takes the value that describes the rewording (clarified|extended|narrowed). Keep replaced for a change whose counterpart is not connected by a move.",
+    "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction). For a change without a counterpart the axis describes what happens to the BODY OF STATEMENTS of the standard: newly added text is extended, text dropped without replacement is narrowed. If a specific successor or predecessor is recognisable elsewhere, answer replaced instead. equivalent is admissible here only if the change record is not a real change at all (a torn sentence, a duplicate, a formatting artefact); then report that record in pipeline_feedback with its change_indices. Without that report, equivalent is wrong for a change without a counterpart. A moved change is the same statement in a new place: the axis describes the TEXT, never the place (the place is structural). Unchanged moved text is equivalent; text reworded on the way takes the value that describes the rewording (clarified|extended|narrowed). Keep replaced for a change whose counterpart is not connected by a move.",
     "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text. A move changes nothing about the duty: the axis describes what the RELOCATION means for whoever is bound, and that is nothing. If the moved text carries a duty, answer unchanged; if it is non-normative, answer not_applicable -- the same value on BOTH sides. tightened or relaxed only if the text was changed on the way and the change itself shifts the duty.",
     "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|formula|note|heading|caption|example|none; use 'other:<short label>' if none of them fits. formula for an equation or its symbols; note for a note or an explanatory remark; heading for a heading or the numbering of the outline; caption for the caption or legend of a figure or a table; example for a worked example or a sample calculation. Separation rules: proof_obligation when what changes is whether or to whom something must be proven, procedure when what changes is how (both may apply, then proof_obligation first); documentation for producing, keeping or presenting records with no body accepting them, proof_obligation as soon as a body accepts the proof; definition only for a change in the terms chapter or to a legal definition, with scope behind it if that shifts the scope of application indirectly; reference only when the change is nothing but the reference, otherwise the substantive component first and reference behind it; definition also for a changed designation, spelling or symbol notation of a term, formula only when the equation itself changes and not its name. Recognisable preprocessing artefacts (a torn sentence, formula residue, a corrected typo) belong in pipeline_feedback and not on this axis."],
     "indeterminate_reason": "no_evidence|ambiguous_scope|conflicting_signals|outside_text -- required when semantic_status or normative_direction is indeterminate, '' otherwise",
@@ -1839,6 +1839,16 @@ PARTNER_AXES = ("semantic_status", "normative_direction")
 #: could be ``equivalent`` to.
 WITHOUT_COUNTERPART = ("added", "removed")
 
+
+def reported_indices(chapter: dict) -> set[int]:
+    """The change records of one chapter that its ``pipeline_feedback`` reports (AP-38).
+
+    The place provided for "this is not a change but a preprocessing artefact". Reading
+    it is what tells a disputed change record from a disputed interpretation.
+    """
+    return {i for fb in (chapter.get("pipeline_feedback") or [])
+            for i in (fb.get("change_indices") or []) if isinstance(i, int)}
+
 #: The narrow successor recogniser: a "now" followed straight away by a named place of
 #: the outline. Measured over the three runs it finds 7 / 1 / 4 cases, every one of them
 #: a real relocation. The wide form (:data:`_SUCCESSOR_HINT`) drops the place and takes
@@ -2008,14 +2018,26 @@ def check_consistency(chapters: list[dict], synopse: dict) -> dict:
                  "partner_mapping_id": where["mapping_id"],
                  "partner_change_index": where["change_index"]} for a in disputed)
 
-    n_b = n_c = n_soft = n_successor = 0
+    reported = {ch.get("mapping_id"): reported_indices(ch) for ch in chapters}
+
+    n_b = n_b_artefact = n_c = n_soft = n_successor = 0
     for (mid, i), d in rows.items():
         records = changes.get(mid) or []
         change = records[i] if 0 <= i < len(records) else None
         if (d.get("semantic_status") == "equivalent"
                 and d.get("structural_operation") in WITHOUT_COUNTERPART):
             d["axis_b_contradicts_a"] = True
-            n_b += 1
+            # AP-38: ... unless the chapter reports this very change as a preprocessing
+            # artefact. The flag claims the interpretation contradicts the kind of the
+            # change -- but here the kind is precisely what is being disputed, at the
+            # place provided for it, and 'equivalent' is then the most honest answer the
+            # vocabulary offers. Counted apart rather than dropped: an exception that
+            # makes a number disappear leaves the size of the case unmeasured.
+            if i in reported.get(mid, ()):
+                d["axis_b_reported_as_artefact"] = True
+                n_b_artefact += 1
+            else:
+                n_b += 1
         modality, direction = change_modality(change), d.get("normative_direction")
         if modality in MODAL_LABELS and direction == "not_applicable":
             d["axis_c_contradicts_modality"] = True
@@ -2038,6 +2060,7 @@ def check_consistency(chapters: list[dict], synopse: dict) -> dict:
         "n_partner_disagreement": n_partner,
         "by_axis": {a: by_axis[a] for a in PARTNER_AXES},
         "n_axis_b_contradicts_a": n_b,
+        "n_axis_b_reported_as_artefact": n_b_artefact,
         "n_axis_c_contradicts_modality": n_c,
         "n_informative_with_direction": n_soft,
         "n_successor_named": n_successor,
@@ -2080,9 +2103,14 @@ def consistency_feedback(report: dict) -> list[dict]:
                      f"are counted")},
         {"section_id": None, "phase": "deutung", "field": "axis_b_contradicts_a",
          "count": r["n_axis_b_contradicts_a"],
+         "n_reported_as_artefact": r.get("n_axis_b_reported_as_artefact", 0),
          "finding": (f"{r['n_axis_b_contradicts_a']} interpretation(s) answer "
                      f"semantic_status 'equivalent' for a change without a counterpart "
-                     f"(structural_operation added or removed); marked, not corrected")},
+                     f"(structural_operation added or removed); marked, not corrected. "
+                     f"{r.get('n_axis_b_reported_as_artefact', 0)} further one(s) are "
+                     f"counted apart because the chapter reports the same change in its "
+                     f"pipeline_feedback -- there the kind of the change is what is "
+                     f"disputed, not the interpretation")},
         {"section_id": None, "phase": "deutung", "field": "axis_c_contradicts_modality",
          "count": r["n_axis_c_contradicts_modality"],
          "finding": (f"{r['n_axis_c_contradicts_modality']} interpretation(s) call a "

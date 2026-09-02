@@ -38,9 +38,11 @@ from pathlib import Path
 import pytest
 
 from normpare.stages.deutung import (
+    CHAPTER_SCHEMA_DOC,
     NORMATIVE_DIRECTIONS,
     SEMANTIC_STATUS,
     WITHOUT_COUNTERPART,
+    build_chapter_prompt,
     check_axes,
     check_consistency,
     consistency_feedback,
@@ -155,7 +157,7 @@ def test_the_classifier_finds_a_named_predecessor():
     row = ewc.rows(chapters, synopse)[0]
 
     assert row["group"] == "relocation"
-    assert "voice_move" in row["signals"] and "names_place" in row["signals"]
+    assert "voice_elsewhere" in row["signals"] and "names_place" in row["signals"]
 
 
 def test_the_classifier_finds_a_duplicate():
@@ -177,13 +179,14 @@ def test_the_classifier_finds_a_duplicate():
 def test_an_unclassifiable_case_is_counted_as_such():
     """A classification that houses everything has bent itself, so the remainder counts.
 
-    A fragment whose free text speaks of no artefact, no move and no duplicate, and
-    which nothing reports: it is neither the genuine addition (that is a whole sentence)
-    nor any of the three others.
+    A free text that claims a counterpart but never says where: it is no genuine
+    addition, because a counterpart is asserted, and it is no relocation either, because
+    nothing names the place. One signal alone must not decide, so it stays unassigned.
     """
-    synopse = _synopse([_chapter("6.8.1<6.8.1", [_change(text="Dabei ist")])])
+    synopse = _synopse([_chapter("6.8.1<6.8.1", [_change()])])
     chapters = [_deutung_chapter("6.8.1<6.8.1", [_interpretation(
-        0, "Einleitung der Formelzeichen-Erläuterung.")])]
+        0, "Der Text des ehemaligen Punktes wird als eigenständiger neuer Eintrag "
+           "übernommen.")])]
 
     run = ewc.classify_run(chapters, synopse)
 
@@ -305,6 +308,33 @@ def test_the_feedback_names_both_counts():
     assert entry["count"] == 0
     assert entry["n_reported_as_artefact"] == 0
     assert "0" in entry["finding"] and "pipeline_feedback" in entry["finding"]
+
+
+# -- the sharpened rule, and the exception it carries -----------------------------------------
+
+def test_the_schema_states_the_rule_for_the_exception():
+    """Part C, and it is only defensible because it names the exception in the same breath.
+
+    The classification is mixed: the artefact groups hold 73 % of the 4110 cases but only
+    27 % of the 60909 ones. A rule that forbade ``equivalent`` outright would force the
+    artefact cases to claim a substantive change the model disputes in the same answer.
+    So the rule ties the value to the report -- the same condition part B checks on the
+    pipeline side, so schema and check say one thing.
+    """
+    rule = ("equivalent is admissible here only if the change record is not a real "
+            "change at all (a torn sentence, a duplicate, a formatting artefact); then "
+            "report that record in pipeline_feedback with its change_indices. Without "
+            "that report, equivalent is wrong for a change without a counterpart.")
+    # AP-28 keeps its sentence: the sharpening is added to it, it does not replace it
+    older = ("newly added text is extended, text dropped without replacement is "
+             "narrowed")
+
+    assert older in CHAPTER_SCHEMA_DOC and rule in CHAPTER_SCHEMA_DOC
+    prompt, _sel = build_chapter_prompt(
+        {"mapping_id": "3.1<3.1", "section_id": "3.1", "title": "Begriffe",
+         "old_id": "3.1", "new_id": "3.1", "part": "hauptteil", "mode": "changed",
+         "n_identical": 0, "tables_diff": [], "changes": [_change()]}, "", "", {}, {})
+    assert older in prompt and rule in prompt
 
 
 # -- 10..11: what stays untouched -------------------------------------------------------------
