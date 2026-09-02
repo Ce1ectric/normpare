@@ -86,33 +86,42 @@ def _large_gap(prev: dict, ln: dict) -> bool:
     return ln["y"] - prev["y"] > ln["size"] * 1.7
 
 
-def _join_caption(lines: list[dict], i: int, in_table=None) -> tuple[str, int, bool]:
-    """A caption over several layout lines, starting at ``lines[i]``.
+def _join_wrapped(lines: list[dict], i: int, text: str, in_table=None,
+                  stop=None) -> tuple[str, int, bool]:
+    """A wrapped line, starting at ``lines[i]`` with the text ``text``.
 
-    The caption branch used to take exactly one line, so the rest of a caption fell
-    through into the ordinary paragraph logic and became body text ("Bild 21 -
-    Schutzkonzept bei Anschluss von Erzeugungsanlagen an" + a paragraph "die
-    Sammelschiene eines Umspannwerks"). A following line is read on while it is
-    recognizably part of the caption -- same page, small gap, no sentence end so far, no
-    bullet, no number of its own, and not the beginning of the next caption.
+    A following line is read on while it is recognizably part of the same line -- same
+    page, small gap, no sentence end so far, no bullet, no number of its own, and not
+    the beginning of a caption or (via ``stop``) of the next heading.
 
-    Returns the caption text, the index of the first line that does *not* belong to it
+    Returns the joined text, the index of the first line that does *not* belong to it
     any more, and whether the join was given up at :data:`MAX_CAPTION_LINES`.
     """
-    text = re.sub(r"\s+", " ", lines[i]["text"]).strip()
     j = i + 1
     while j < len(lines) and not _SENTENCE_END.search(text):
         ln, prev = lines[j], lines[j - 1]
         t = ln["text"].strip()
         if (in_table is not None and in_table(ln)) or ln["page"] != prev["page"] \
                 or _large_gap(prev, ln) or not t or _BULLET.match(t) \
-                or _PAGE_NUMBER.fullmatch(t) or _caption_line(t):
+                or _PAGE_NUMBER.fullmatch(t) or _caption_line(t) \
+                or (stop is not None and stop(t)):
             break
         if j - i >= MAX_CAPTION_LINES:
             return text, j, True
         text = (text + " " + re.sub(r"\s+", " ", t)).strip()
         j += 1
     return text, j, False
+
+
+def _join_caption(lines: list[dict], i: int, in_table=None) -> tuple[str, int, bool]:
+    """A caption over several layout lines, starting at ``lines[i]``.
+
+    The caption branch used to take exactly one line, so the rest of a caption fell
+    through into the ordinary paragraph logic and became body text ("Bild 21 -
+    Schutzkonzept bei Anschluss von Erzeugungsanlagen an" + a paragraph "die
+    Sammelschiene eines Umspannwerks"). :func:`_join_wrapped` reads it to its end.
+    """
+    return _join_wrapped(lines, i, re.sub(r"\s+", " ", lines[i]["text"]).strip(), in_table)
 
 
 def _formula_like(text: str, fonts: set[str]) -> bool:
@@ -323,6 +332,7 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
     #: and the caption would never reach the artefact (AP-39a, finding B-1).
     asset_claims: list[tuple[int, str, dict]] = []
     captions_capped = 0     # captions whose join was given up at MAX_CAPTION_LINES
+    sub_heads_capped = 0    # sub-headings whose join was given up there as well
     # Term contexts: sections under a "Begriffe" chapter -- there the structure is
     # number + name(s) + explanation; name/symbol/synonym lines ("PAV, B",
     # "(FRT-Fähigkeit)") must become their own paragraphs.
@@ -402,10 +412,17 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                 flush()
                 rest = shm.group(2).strip(" –—-:")
                 if rest:
+                    # a wrapped sub-heading is read to its end, by the same rule as a
+                    # caption -- otherwise its continuation line becomes an ordinary
+                    # paragraph ("... an die" + "Sammelschiene eines Umspannwerks")
+                    rest, li, capped = _join_wrapped(sec_lines, li - 1, rest, _in_table,
+                                                     stop=sub_head_re.match)
+                    sub_heads_capped += capped
                     paras.append({"text": rest, "kind": "term", "page": ln["page"],
                                   "term_no": shm.group(1)})
-                else:
-                    pending_term = shm.group(1) or True
+                    prev = sec_lines[li - 1]
+                    continue
+                pending_term = shm.group(1) or True
                 prev = ln
                 continue
             cm = _caption_line(t.strip())
@@ -522,10 +539,13 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
         sections[si][key].append({k2: v for k2, v in a.items()
                                   if k2 not in ("y", "_used")})
 
+    log = logging.getLogger(__name__)
     if captions_capped:
-        logging.getLogger(__name__).info(
-            "%s: %d caption(s) run over more than %d lines and were cut there",
-            path.name, captions_capped, MAX_CAPTION_LINES)
+        log.info("%s: %d caption(s) run over more than %d lines and were cut there",
+                 path.name, captions_capped, MAX_CAPTION_LINES)
+    if sub_heads_capped:
+        log.info("%s: %d sub-heading(s) run over more than %d lines and were cut there",
+                 path.name, sub_heads_capped, MAX_CAPTION_LINES)
 
     meta = {"doc_id": doc_id, "title": title, "version_label": version_label,
             "source": {"filename": path.name, "sha256": _sha256(path), "format": "pdf",
