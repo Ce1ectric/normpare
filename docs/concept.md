@@ -73,6 +73,13 @@ and wording, axis C about strictness — `narrowed` means "covers fewer cases", 
 "stricter". A value outside its vocabulary is discarded and reported, never silently
 corrected, and an axis may abstain with `indeterminate` plus an `indeterminate_reason`.
 
+For a change **without** a counterpart axis B describes what happens to the body of
+statements: added text is `extended`, text dropped without replacement is `narrowed`, and
+`replaced` where a successor or predecessor is recognisable elsewhere. `equivalent` is
+admissible only where the change record is no real change at all — a torn sentence, a
+duplicate, a formatting artefact — and then the record has to be reported in
+`pipeline_feedback`. Without that report `equivalent` is wrong here.
+
 A move is one event with two change records, one in the old chapter and one in the new
 one, and axis B describes the **text**, not the place: unchanged moved text is
 `equivalent`, text reworded on the way takes the value that describes the rewording, and
@@ -98,7 +105,11 @@ correcting** — the reported value stays where it is:
   paragraph aligner left behind and compared on axes B and C. A difference is flagged on
   **both** sides, with the other side's value. A move whose pointer names only the chapter
   is not compared.
-- `axis_b_contradicts_a` — `equivalent` for a change that has no counterpart at all.
+- `axis_b_contradicts_a` — `equivalent` for a change that has no counterpart at all. Where
+  the chapter reports that very change in its `pipeline_feedback`, the record is counted
+  **apart** instead: there the kind of the change is what is being disputed, at the place
+  provided for it, and `equivalent` is the most honest answer the vocabulary offers. Both
+  numbers are reported, at zero as well, and the flag stays on the record either way.
 - `axis_c_contradicts_modality` — a change with a modal sentence called non-normative. The
   reverse case (informative text with a direction) is counted only, never flagged: the
   modality detection is not certain enough there.

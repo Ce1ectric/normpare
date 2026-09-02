@@ -201,8 +201,13 @@ def render(run: dict) -> str:
         for (a, b), n in x["signatures"][axis].most_common():
             L.append(f"        moved_away {a} / moved_in {b}: {n}")
     L += ["", "2. axis B against axis A (finding 2)",
-          _line("equivalent without counterpart", r["n_axis_b_contradicts_a"], n_all)]
-    L += [f"        on {op}: {n}" for op, n in sorted(x["equivalent_on"].items())]
+          _line("equivalent without counterpart", r["n_axis_b_contradicts_a"], n_all),
+          # AP-38: the exception, counted apart rather than dropped -- the two lines
+          # together are the number this section reported before
+          _line("... reported as an artefact (AP-38)",
+                r.get("n_axis_b_reported_as_artefact", 0), n_all)]
+    L += [f"        on {op}: {n} (both counts together)"
+          for op, n in sorted(x["equivalent_on"].items())]
     L += ["", "3. axis C against the modality (finding 3)",
           _line("modal, called not_applicable", r["n_axis_c_contradicts_modality"],
                 n_all)]
@@ -304,8 +309,13 @@ def render_comparison(runs: list[dict]) -> str:
           _row("equivalent without counterpart",
                cells(lambda r: f"{r['report']['n_axis_b_contradicts_a']} = "
                      f"{_pct(r['report']['n_axis_b_contradicts_a'], r['extra']['n_interpretations'])} %"),
+               indent="      "),
+          _row("... reported as an artefact (AP-38)",
+               cells(lambda r: f"{r['report'].get('n_axis_b_reported_as_artefact', 0)} = "
+                     f"{_pct(r['report'].get('n_axis_b_reported_as_artefact', 0), r['extra']['n_interpretations'])} %"),
                indent="      ")]
-    L += [_row(f"on {op}", cells(lambda r, o=op: r["extra"]["equivalent_on"][o]),
+    L += [_row(f"on {op} (both counts)",
+               cells(lambda r, o=op: r["extra"]["equivalent_on"][o]),
                indent="        ") for op in ("added", "removed")]
 
     L += ["", "3. axis C against the modality (finding 3)",

@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **`equivalent` without a counterpart is classified before it is judged.**
+  `tools/equivalent_without_counterpart.py` assigns every such interpretation of a
+  finished run to one of four groups — a relocation with a recognisable counterpart, a
+  torn continuation, a duplicate, a genuine addition — from signals that are on disk (the
+  chapter's `pipeline_feedback`, a named change or place in the free text, axis D, whether
+  the change text is a fragment, and the voice of the free text). No signal decides on its
+  own, the assignment rule is in the module docstring, and the records that fit no rule are
+  counted as such. Read-only, offline, several `--dir`, writes only below `--out`.
+
+### Changed
+
+- **A disputed change record no longer counts as a disputed interpretation.**
+  `axis_b_contradicts_a` still marks every `equivalent` on a change without a counterpart,
+  but where the chapter reports that same change in its `pipeline_feedback` the record is
+  counted in `n_axis_b_reported_as_artefact` instead of `n_axis_b_contradicts_a`. The flag
+  is not removed and no value is corrected; both numbers reach `pipeline_feedback`, at zero
+  as well. Measured over the three reference runs the first number falls from 116 / 72 / 63
+  to 47 / 26 / 37.
+- **The schema says when `equivalent` is admissible without a counterpart.** The field
+  description of `semantic_status` now ties the value to the report: it is admissible only
+  where the change record is no real change at all, and then the record has to be named in
+  `pipeline_feedback`. +286 characters per request (+1.95 % / +2.04 % / +2.54 %); the answer
+  cache is invalidated for every chapter.
+
 ### Fixed
 
 - **The replay driver replays the run instead of continuing it.** `tools/replay.py`
