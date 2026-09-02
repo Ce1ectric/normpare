@@ -85,6 +85,34 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **A move shows its counterpart in the request.** The change record of a move carries
+  only its own half — a `moved_away` has the old text, a `moved_in` the new one — and of
+  the other half the request held nothing but a pointer. So the axis B rule ("unchanged
+  moved text is `equivalent`, text reworded on the way takes the value of the rewording")
+  was not decidable at all: the model could not see whether the text had been reworded.
+  The counterpart is now resolved over `moved_to`/`moved_from` and shown under the label
+  of its side — the new text for a `moved_away`, the old one for a `moved_in` — clipped at
+  the same 900 characters as every other text in the block. Where the pointer names only
+  the chapter (a block continuation) or a paragraph the document does not have, nothing is
+  added: no placeholder and no guess. Measured over the three runs of 2026-09-01, all 140
+  / 160 / 52 pointers resolve, and the counterpart costs 31 653 / 38 123 / 10 977
+  characters, on average 163 / 205 / 97 per request.
+
+- **The field description of `normative_direction` says what axis C means for a move.**
+  Axis B was settled by the rule of the previous entry — disagreement between the two
+  records of one move fell from 66 % / 88 % / 54 % to 1.4 % / 1.3 % / 3.9 % — and axis C
+  became the whole remainder: 24 / 33 / 7 disagreeing pairs, and the entire growth of the
+  review queue from 17 / 25 / 13 to 63 / 104 / 31 entries. The two sides almost never
+  argue about the direction; they argue about whether the text is normative at all
+  (`unchanged` against `not_applicable` in 23 / 22 / 7 of the cases). The rule: a move
+  changes nothing about the duty, so the axis describes what the *relocation* means for
+  whoever is bound, and that is nothing — `unchanged` where the moved text carries a duty,
+  `not_applicable` where it does not, the same value on **both** sides, and
+  `tightened`/`relaxed` only where the text was changed on the way and the change itself
+  shifts the duty. **No new value and no new axis field**; the rule costs 359 characters
+  of schema. It is followable only because of the counterpart above: "the same value on
+  both sides" presupposes that both sides see the same thing.
+
 - **The field description of `semantic_status` says what axis B means for a change
   without a counterpart.** The axis says what happens to the *statement*, and a purely
   added or purely dropped passage has no previous statement that `equivalent`,

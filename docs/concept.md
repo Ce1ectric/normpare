@@ -76,7 +76,16 @@ corrected, and an axis may abstain with `indeterminate` plus an `indeterminate_r
 A move is one event with two change records, one in the old chapter and one in the new
 one, and axis B describes the **text**, not the place: unchanged moved text is
 `equivalent`, text reworded on the way takes the value that describes the rewording, and
-`replaced` stays with a change whose counterpart is not connected by a move.
+`replaced` stays with a change whose counterpart is not connected by a move. Axis C says
+what the *relocation* means for whoever is bound, and that is nothing: `unchanged` where
+the moved text carries a duty, `not_applicable` where it does not, the same value on both
+sides, and `tightened`/`relaxed` only where the text was changed on the way.
+
+Both rules are answerable because the prompt shows the move from both sides. A change
+record of a move carries only its own half — the old text where the passage left, the new
+text where it arrived — so the request resolves the counterpart over the pointer and shows
+it under the label of its side. Where the pointer names only the chapter, or names a
+paragraph the document does not have, nothing is added: no placeholder and no guess.
 
 ## The axes against what the pipeline knows
 
