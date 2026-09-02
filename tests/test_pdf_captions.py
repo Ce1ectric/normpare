@@ -23,7 +23,6 @@ from normpare.stages.ingest import docx as docx_reader
 from normpare.stages.ingest.pdf import _caption_line, _join_caption, read_pdf
 from normpare.text.captions import is_caption_rest
 
-
 # --------------------------------------------------------------------------- helpers
 
 def _line(text: str, page: int = 1, y: float = 100.0, size: float = 10.0,
@@ -73,8 +72,9 @@ def _texts(meta: dict) -> list[str]:
 def test_a_two_line_caption_is_joined():
     """The continuation line belongs to the caption, not to the body text."""
     lines = _stack("Bild 21 – Schutzkonzept bei Anschluss von Erzeugungsanlagen an",
-                   "die Sammelschiene eines Umspannwerks",
-                   "Die Anforderungen an den Schutz sind einzuhalten.")
+                   "die Sammelschiene eines Umspannwerks")
+    # the body text below the caption is set off by paragraph spacing
+    lines.append(_line("Die Anforderungen an den Schutz sind einzuhalten.", y=160.0))
     text, nxt, capped = _join_caption(lines, 0)
     assert text == ("Bild 21 – Schutzkonzept bei Anschluss von Erzeugungsanlagen an "
                     "die Sammelschiene eines Umspannwerks")
@@ -152,7 +152,10 @@ def test_a_sentence_end_is_not_a_caption(tmp_path):
           (60, 134, "Tabelle 10 empfohlen.", 10)]],
         [[1, "1 Einstellwerte", 1]])
     meta = read_pdf(path, tmp_path / "out", "sentence", "Sentence", "alt")
-    assert any("Tabelle 10 empfohlen." in t for t in _texts(meta))
+    paras = [p for s in meta["sections"] for p in s["paragraphs"]]
+    assert [(p["n0"], p["kind"]) for p in paras] == [
+        ("Als Grundparametrierung werden die Einstellwerte nach Tabelle 10 empfohlen.",
+         "text")]
 
 
 def test_a_real_caption_with_a_dash_is_one():
@@ -173,18 +176,22 @@ def test_a_continuation_page_caption_survives():
 # ------------------------------------------------------------- C: the page number falls
 
 def test_a_page_number_between_paragraphs_is_dropped(tmp_path):
-    """A digit line without an open paragraph falls, too -- it is the page number."""
+    """A digit line without an open paragraph falls, too -- it is the page number.
+
+    No paragraph is open here because the caption before it closed the last one -- that is
+    the situation of the 13 / 19 / 6 digit paragraphs measured in the three corpora.
+    """
     path = _write_pdf(
         tmp_path / "pageno.pdf",
         [[(60, 90, "1 Schutz", 14),
-          (60, 120, "Der Schutz ist einzustellen.", 10),
+          (60, 120, "Bild 21 – Schutzkonzept der Anlage", 10),
           (60, 700, "116", 10)],
          [(60, 90, "2 Erdung", 14),
           (60, 120, "Die Erdung ist auszufuehren.", 10)]],
         [[1, "1 Schutz", 1], [1, "2 Erdung", 2]])
     meta = read_pdf(path, tmp_path / "out", "pageno", "Pageno", "alt")
     assert "116" not in _texts(meta)
-    assert "Der Schutz ist einzustellen." in _texts(meta)
+    assert "Bild 21 – Schutzkonzept der Anlage" in _texts(meta)
 
 
 def test_a_page_number_inside_a_paragraph_still_drops(tmp_path):
@@ -192,24 +199,28 @@ def test_a_page_number_inside_a_paragraph_still_drops(tmp_path):
     path = _write_pdf(
         tmp_path / "inside.pdf",
         [[(60, 90, "1 Schutz", 14),
-          (60, 120, "Der Schutz ist nach den Vorgaben des", 10),
+          (60, 120, "Der Schutz ist nach den Vorgaben des Netzbetreibers", 10),
           (60, 700, "116", 10)],
-         [(60, 120, "Netzbetreibers einzustellen.", 10)]],
+         [(60, 120, "einzustellen.", 10)]],
         [[1, "1 Schutz", 1]])
     meta = read_pdf(path, tmp_path / "out", "inside", "Inside", "alt")
     assert "116" not in _texts(meta)
-    assert any(t.startswith("Der Schutz ist nach den Vorgaben des Netzbetreibers")
-               for t in _texts(meta))
+    assert any(t.startswith("Der Schutz ist nach den Vorgaben des Netzbetreibers "
+                            "einzustellen.") for t in _texts(meta))
 
 
 def test_a_numeric_list_item_survives(tmp_path):
-    """The boundary from part C: a column value in a legend is not a page number."""
+    """The boundary from part C: a column value in a legend is not a page number.
+
+    The layout is the one of the annexes: a figure caption, below it the legend, whose
+    entries carry the numbers of the figure ("1" + "Netzanschlusspunkt").
+    """
     path = _write_pdf(
         tmp_path / "legend.pdf",
         [[(60, 90, "1 Legende", 14),
-          (60, 120, "Legende", 10),
-          (60, 140, "1", 10),
-          (60, 160, "Netzanschlusspunkt", 10),
+          (60, 120, "Bild A.1 – Netzanschlussschema", 10),
+          (60, 150, "1", 10),
+          (60, 180, "Netzanschlusspunkt", 10),
           (60, 300, "Die Bezeichnungen gelten fuer alle Bilder.", 10)]],
         [[1, "1 Legende", 1]])
     meta = read_pdf(path, tmp_path / "out", "legend", "Legend", "alt")

@@ -19,6 +19,7 @@ from pathlib import Path
 from .align.sections import mapping_id
 from .enrich import modality, refs, values
 from .review_removed import annotate_relocation
+from ..text.captions import SEPARATOR as CAPTION_SEPARATOR
 from ..text.textnorm import compare_key, garbage_ratio, n1, n2, n3, split_sentences
 
 _TOKEN = re.compile(r"(\s+|[.,;:!?(){}\[\]/–—„“”\"'])")
@@ -352,7 +353,8 @@ def _is_fragment_table(t: dict) -> bool:
 #: deliberately not one, because "Tabelle 10 empfohlen." is a sentence end, not a caption.
 _CAPTION_RE = re.compile(
     r"\s*(?:Tabellen?|Tab\.|Bild(?:er)?|Abbildung|Table|Figure|Fig\.)\s*"
-    r"([0-9]+(?:\.[0-9]+)*|[A-Za-z](?:\.[0-9]+)*)\s*[–—:-]\s*(\S.*)", re.I)
+    r"([0-9]+(?:\.[0-9]+)*|[A-Za-z](?:\.[0-9]+)*)\s*" + CAPTION_SEPARATOR + r"\s*(\S.*)",
+    re.I)
 #: Below this many characters the descriptive rest is not a description.
 MIN_CAPTION_TEXT = 3
 #: Rows and characters of the cell text that enter the content comparison. AP-22 widened
@@ -381,7 +383,9 @@ def caption_text(caption: str | None) -> str | None:
     Two jobs in one place (AP-22). First hygiene: PDF extraction regularly puts the tail of
     the preceding sentence into the caption field ("Tabelle 10 empfohlen."), and because
     that field was not empty, the caption comparison ran on garbage. Such a string is
-    treated like a missing caption -- it is not deleted, it just does not count.
+    treated like a missing caption -- it is not deleted, it just does not count. The
+    separator that decides this comes from :mod:`normpare.text.captions`, where the PDF
+    reader takes it from as well (AP-39).
 
     Second, the number is dropped: in a renumbered edition it is the least reliable part of
     the caption while the descriptive rest is the carrier ("Tabelle 11 - Einstellwerte X"

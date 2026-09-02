@@ -15,6 +15,7 @@ confidence).
 from __future__ import annotations
 import hashlib
 import json
+import logging
 import re
 from collections import Counter
 from pathlib import Path
@@ -22,6 +23,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 
 from . import SKIP_TITLES, VORSPANN_TITLES
+from ...text.captions import is_caption_rest
 
 
 def _sha256(path: Path) -> str:
@@ -52,9 +54,65 @@ def _is_skip_toc(line: str, doc_title: str = "") -> bool:
     t = (doc_title or "").strip().lower()
     return bool(t) and (s == t or (len(s) > 3 and s in t))
 
-_CAPTION_LINE = re.compile(r"^\s*(Tabelle|Bild|Abbildung)\s+([A-Z]?\.?\d+(?:\.\d+)*)\s*(?:[–—\-:]\s*)?(.*)$")
+_CAPTION_LINE = re.compile(r"^\s*(Tabelle|Bild|Abbildung)\s+([A-Z]?\.?\d+(?:\.\d+)*[a-z]?)(.*)$")
 _BULLET = re.compile(r"^\s*(?:[–—•\-]\s+|[a-z]\)\s+|\d+\)\s+|[ivx]+\.\s+)")
 _FORMULA_CHARS = set("=≤≥<>±×⋅·∙√∑∏∫Δφϕαβγητωπ∞≈")
+#: A line that ends here ends a sentence -- used both for the continuation of a paragraph
+#: and for the continuation of a caption.
+_SENTENCE_END = re.compile(r"[.!?:;]\s*$")
+#: A line that consists of nothing but this is a page number, not a statement.
+_PAGE_NUMBER = re.compile(r"\d{1,4}")
+#: A caption may run over at most this many layout lines. Beyond that the join is given
+#: up: a caption of four lines is more likely a caption followed by body text than a
+#: caption (AP-39).
+MAX_CAPTION_LINES = 3
+
+
+def _caption_line(text: str):
+    """The caption match of a layout line, or ``None`` if the line is not a caption.
+
+    The keyword and the number alone do not make a caption: without a separator behind the
+    number the line is the tail of a sentence ("... nach Tabelle 10 empfohlen."), which
+    used to displace the real caption of the table next to it. The rule is
+    :func:`normpare.text.captions.is_caption_rest`, the same one the table comparison
+    applies.
+    """
+    m = _CAPTION_LINE.match(text)
+    return m if m and is_caption_rest(m.group(3)) else None
+
+
+def _large_gap(prev: dict, ln: dict) -> bool:
+    """True if the line spacing is too large for the two lines to belong together."""
+    return ln["y"] - prev["y"] > ln["size"] * 1.7
+
+
+def _join_caption(lines: list[dict], i: int, in_table=None) -> tuple[str, int, bool]:
+    """A caption over several layout lines, starting at ``lines[i]``.
+
+    The caption branch used to take exactly one line, so the rest of a caption fell
+    through into the ordinary paragraph logic and became body text ("Bild 21 -
+    Schutzkonzept bei Anschluss von Erzeugungsanlagen an" + a paragraph "die
+    Sammelschiene eines Umspannwerks"). A following line is read on while it is
+    recognizably part of the caption -- same page, small gap, no sentence end so far, no
+    bullet, no number of its own, and not the beginning of the next caption.
+
+    Returns the caption text, the index of the first line that does *not* belong to it
+    any more, and whether the join was given up at :data:`MAX_CAPTION_LINES`.
+    """
+    text = re.sub(r"\s+", " ", lines[i]["text"]).strip()
+    j = i + 1
+    while j < len(lines) and not _SENTENCE_END.search(text):
+        ln, prev = lines[j], lines[j - 1]
+        t = ln["text"].strip()
+        if (in_table is not None and in_table(ln)) or ln["page"] != prev["page"] \
+                or _large_gap(prev, ln) or not t or _BULLET.match(t) \
+                or _PAGE_NUMBER.fullmatch(t) or _caption_line(t):
+            break
+        if j - i >= MAX_CAPTION_LINES:
+            return text, j, True
+        text = (text + " " + re.sub(r"\s+", " ", t)).strip()
+        j += 1
+    return text, j, False
 
 
 def _formula_like(text: str, fonts: set[str]) -> bool:
@@ -201,6 +259,10 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
     lines, repeat = _collect_lines(doc)
     lines = [l for l in lines if not _is_headfoot(l, repeat, page_h)]
     body_size = Counter(round(l["size"]) for l in lines).most_common(1)[0][0]
+    # first and last line of a page: only there is a page number printed
+    for i, l in enumerate(lines):
+        l["page_edge"] = (i == 0 or lines[i - 1]["page"] != l["page"]
+                          or i == len(lines) - 1 or lines[i + 1]["page"] != l["page"])
 
     # determine heading positions (monotonically increasing)
     idx = 0
@@ -254,6 +316,7 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
 
     # reconstruct paragraphs per section
     sections = []
+    captions_capped = 0     # captions whose join was given up at MAX_CAPTION_LINES
     # Term contexts: sections under a "Begriffe" chapter -- there the structure is
     # number + name(s) + explanation; name/symbol/synonym lines ("PAV, B",
     # "(FRT-Fähigkeit)") must become their own paragraphs.
@@ -298,14 +361,16 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                     paras.append({"text": text, **meta})
             buf, buf_meta = [], None
 
-        for ln in sec_lines:
+        def _in_table(ln: dict) -> bool:
+            return any(bb[1] - 2 <= ln["y"] <= bb[3] + 2
+                       for bb in table_bboxes.get(ln["page"], []))
+
+        li = 0
+        while li < len(sec_lines):
+            ln = sec_lines[li]
+            li += 1
             # skip lines inside detected tables
-            in_table = False
-            for bb in table_bboxes.get(ln["page"], []):
-                if bb[1] - 2 <= ln["y"] <= bb[3] + 2:
-                    in_table = True
-                    break
-            if in_table:
+            if _in_table(ln):
                 continue
             t = ln["text"].rstrip()
             # bullet as its own layout line ("- "): treat as a prefix of the
@@ -337,11 +402,12 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                     pending_term = shm.group(1) or True
                 prev = ln
                 continue
-            cm = _CAPTION_LINE.match(t.strip())
+            cm = _caption_line(t.strip())
             if cm and (ln["bold"] or len(t.strip()) < 120):
                 flush()
                 kind = cm.group(1)
-                cap = re.sub(r"\s+", " ", t).strip()
+                cap, li, capped = _join_caption(sec_lines, li - 1, _in_table)
+                captions_capped += capped
                 target_list = tables_by_page if kind == "Tabelle" else figures_by_page
                 # find an asset on the same page near y
                 best, bd = None, 1e9
@@ -353,17 +419,17 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                     best["caption"] = cap
                 else:
                     paras.append({"text": cap, "kind": "caption", "page": ln["page"]})
-                prev = ln
+                prev = sec_lines[li - 1]
                 continue
             new_para = False
             if prev is None:
                 new_para = True
             else:
                 buf_text = " ".join(buf)
-                continues = (buf_text and not re.search(r"[.!?:;]\s*$", buf_text)
+                continues = (buf_text and not _SENTENCE_END.search(buf_text)
                              and (t.strip()[:1].islower() or t.strip()[:1] in "(–-0123456789"))
                 page_break = ln["page"] != prev["page"]
-                gap = (not page_break) and (ln["y"] - prev["y"] > ln["size"] * 1.7)
+                gap = (not page_break) and _large_gap(prev, ln)
                 if _BULLET.match(t) or re.match(r"^\s*(ANMERKUNG|BEISPIEL)", t):
                     new_para = True
                 elif page_break:
@@ -371,9 +437,13 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                 elif gap:
                     new_para = True
             # page-number lines in the middle of content (a paragraph runs across the page
-            # break and the header/footer filter misses narrow margins) -> drop them
-            # when a paragraph is currently open (continuation context)
-            if buf and re.fullmatch(r"\d{1,4}", t.strip()):
+            # break and the header/footer filter misses narrow margins) -> drop them.
+            # While a paragraph is open the line is a page number in any case; standing
+            # between two paragraphs it is one when it is the first or the last line of
+            # its page -- there and only there the page number is printed. A number in the
+            # middle of a page belongs to the content: the legends of the annexes number
+            # their entries that way ("1" + "Netzanschlusspunkt", AP-39).
+            if (buf or ln.get("page_edge")) and _PAGE_NUMBER.fullmatch(t.strip()):
                 prev = ln
                 continue
             if buf_meta is None:
@@ -443,6 +513,11 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                     out_sec["figures"].append({k2: v for k2, v in a.items()
                                                if k2 not in ("y", "_used")})
         sections.append(out_sec)
+
+    if captions_capped:
+        logging.getLogger(__name__).info(
+            "%s: %d caption(s) run over more than %d lines and were cut there",
+            path.name, captions_capped, MAX_CAPTION_LINES)
 
     meta = {"doc_id": doc_id, "title": title, "version_label": version_label,
             "source": {"filename": path.name, "sha256": _sha256(path), "format": "pdf",
