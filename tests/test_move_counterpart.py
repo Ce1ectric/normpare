@@ -166,14 +166,14 @@ def test_a_paired_change_is_unchanged():
            "old_ids": ["11.2.p3"], "new_ids": ["11.2.p3"],
            "old_text": "Die Anlage ist jährlich zu prüfen.",
            "new_text": "Die Anlage ist halbjährlich zu prüfen.",
-           "modality": {"old": "muss", "new": "muss"},
+           "modality": {"old": "muss", "new": "muss", "shift": "unveraendert"},
            "kennwerte": {"changed": [], "added": [], "removed": []}}
 
     block = _change_block(4, rec, _paramap(_secs(AWAY_ID, OLD_SIDE)),
                           _paramap(_secs(INTO_ID, NEW_SIDE)))
 
     assert block == ("[4] TYP=changed\n"
-                     "    Modalität: muss → muss\n"
+                     "    Modalität: muss → muss (unveraendert)\n"
                      "    ALT: Die Anlage ist jährlich zu prüfen.\n"
                      "    NEU: Die Anlage ist halbjährlich zu prüfen.")
 

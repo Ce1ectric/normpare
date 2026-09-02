@@ -322,7 +322,7 @@ CHAPTER_SCHEMA_DOC = """{
     "semantic_label": "equivalent|clarified|extended|restricted|new_obligation|removed_obligation|moved|optional|informative|contradictory",
     "obligation": "tightened|relaxed|unchanged",
     "semantic_status": "equivalent|clarified|extended|narrowed|replaced|contradictory|indeterminate -- what happens to the STATEMENT itself; narrowed = the scope now covers fewer cases, never 'stricter' (strictness is normative_direction). For a change without a counterpart the axis describes what happens to the BODY OF STATEMENTS of the standard: newly added text is extended, text dropped without replacement is narrowed. If a specific successor or predecessor is recognisable elsewhere, answer replaced instead. A moved change is the same statement in a new place: the axis describes the TEXT, never the place (the place is structural). Unchanged moved text is equivalent; text reworded on the way takes the value that describes the rewording (clarified|extended|narrowed). Keep replaced for a change whose counterpart is not connected by a move.",
-    "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text",
+    "normative_direction": "tightened|relaxed|unchanged|not_applicable|indeterminate -- what it means for whoever is bound by the requirement; not_applicable for non-normative text. A move changes nothing about the duty: the axis describes what the RELOCATION means for whoever is bound, and that is nothing. If the moved text carries a duty, answer unchanged; if it is non-normative, answer not_applicable -- the same value on BOTH sides. tightened or relaxed only if the text was changed on the way and the change itself shifts the duty.",
     "affected_components": ["which parts of the standard the change touches, most important first: proof_obligation|limit_value|procedure|deadline|responsibility|documentation|scope|definition|reference|formula|note|heading|caption|example|none; use 'other:<short label>' if none of them fits. formula for an equation or its symbols; note for a note or an explanatory remark; heading for a heading or the numbering of the outline; caption for the caption or legend of a figure or a table; example for a worked example or a sample calculation. Separation rules: proof_obligation when what changes is whether or to whom something must be proven, procedure when what changes is how (both may apply, then proof_obligation first); documentation for producing, keeping or presenting records with no body accepting them, proof_obligation as soon as a body accepts the proof; definition only for a change in the terms chapter or to a legal definition, with scope behind it if that shifts the scope of application indirectly; reference only when the change is nothing but the reference, otherwise the substantive component first and reference behind it; definition also for a changed designation, spelling or symbol notation of a term, formula only when the equation itself changes and not its name. Recognisable preprocessing artefacts (a torn sentence, formula residue, a corrected typo) belong in pipeline_feedback and not on this axis."],
     "indeterminate_reason": "no_evidence|ambiguous_scope|conflicting_signals|outside_text -- required when semantic_status or normative_direction is indeterminate, '' otherwise",
     "change": "1-2 sentences describing the substance of the change",
@@ -848,7 +848,18 @@ def _clip(t: str | None, n: int, mark: bool = False) -> str:
     return t[:n] + (f" … (gekürzt, +{len(t) - n} Zeichen)" if mark else " …")
 
 
-def _change_block(i: int, c: dict) -> str:
+def _change_block(i: int, c: dict, o_paras: dict | None = None,
+                  n_paras: dict | None = None) -> str:
+    """One change as the prompt shows it.
+
+    ``o_paras``/``n_paras`` are the paragraph texts of the two documents (:func:`_paramap`)
+    and serve one purpose: a move carries only its own side -- ``moved_away`` an
+    ``old_text``, ``moved_in`` a ``new_text`` -- and of the counterpart the block held
+    nothing but a pointer. The model was asked whether the text was reworded on the way
+    (the axis B rule of AP-29) without being shown the other half of it. Resolved over the
+    pointer, the move gets both texts like any paired change (AP-37); without a resolvable
+    pointer nothing is added -- no placeholder, no guess.
+    """
     L = [f"[{i}] TYP={c['kind']}"]
     if c.get("modality"):
         mod = c["modality"]
@@ -880,10 +891,17 @@ def _change_block(i: int, c: dict) -> str:
     elif c.get("moved_to_chapter"):
         # AP-26 block continuation: the chapter is proven, the paragraph is not
         L.append(f"    (verschoben nach Kapitel {c['moved_to_chapter']})")
-    if c.get("old_text"):
-        L.append(f"    ALT: {_clip(c['old_text'], 900)}")
-    if c.get("new_text"):
-        L.append(f"    NEU: {_clip(c['new_text'], 900)}")
+    old_text, new_text = c.get("old_text"), c.get("new_text")
+    # the counterpart of a move: moved_away lost it to the new edition, moved_in received
+    # it from the old one -- the label follows the side, never the record
+    if not new_text and c.get("moved_to"):
+        new_text = (n_paras or {}).get(c["moved_to"])
+    if not old_text and c.get("moved_from"):
+        old_text = (o_paras or {}).get(c["moved_from"])
+    if old_text:
+        L.append(f"    ALT: {_clip(old_text, 900)}")
+    if new_text:
+        L.append(f"    NEU: {_clip(new_text, 900)}")
     return "\n".join(L)
 
 
@@ -894,6 +912,16 @@ def _tabmap(secs: dict) -> dict:
         for t in s.get("tables") or []:
             m[t["id"]] = t
     return m
+
+
+def _paramap(secs: dict) -> dict:
+    """id -> paragraph text across all sections (secs: {section_id: section}).
+
+    The text is the one the change records carry, so a resolved counterpart reads like
+    the ``ALT:``/``NEU:`` of a paired change and not like a second source.
+    """
+    return {p["id"]: (p.get("n1") or p.get("n0") or "")
+            for s in secs.values() for p in s.get("paragraphs") or []}
 
 
 def _render_cells(t: dict, max_rows: int = 40, max_chars: int = TABLE_CHARS,
@@ -1338,8 +1366,12 @@ def render_chapter_prompt(ch: dict, old_excerpt: str, new_excerpt: str, sel: lis
             "", "AUSZUG NEUE FASSUNG:", _clip(new_excerpt, 1600) or "(Kapitel in der neuen Fassung entfallen)",
             "", (f"ÄNDERUNGEN ({len(sel)} von {len(ch['changes'])}{of_parts}, "
                  "deterministisch ermittelt):")]
+    # AP-37: the counterpart of a move lives in the other document, so it is resolvable
+    # only where both documents are at hand. Without them the block stays what it was.
+    o_paras = _paramap(o_secs) if o_secs is not None else {}
+    n_paras = _paramap(n_secs) if n_secs is not None else {}
     for i in sel:
-        head.append(_change_block(i, ch["changes"][i]))
+        head.append(_change_block(i, ch["changes"][i], o_paras, n_paras))
     # tables and figures travel with block 1 only: asked in every block they would be
     # interpreted n times, and the merge would have to undo that for no gain
     assets = (chapter_assets_block(ch, o_secs, n_secs, notes=notes)
