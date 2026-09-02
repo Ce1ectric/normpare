@@ -316,6 +316,12 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
 
     # reconstruct paragraphs per section
     sections = []
+    #: (index in `sections`, "tables"|"figures", asset) -- who gets which asset. The
+    #: copies are only made when every section has been read: a caption is found in the
+    #: paragraph pass and written into the asset dictionary, so on a page that straddles
+    #: a section boundary a copy taken during the loop would still carry `caption: None`
+    #: and the caption would never reach the artefact (AP-39a, finding B-1).
+    asset_claims: list[tuple[int, str, dict]] = []
     captions_capped = 0     # captions whose join was given up at MAX_CAPTION_LINES
     # Term contexts: sections under a "Begriffe" chapter -- there the structure is
     # number + name(s) + explanation; name/symbol/synonym lines ("PAV, B",
@@ -499,20 +505,22 @@ def read_pdf(path: str | Path, out_dir: str | Path, doc_id: str, title: str,
                 rec["formulas"] = [fid]
             out_sec["paragraphs"].append(rec)
 
-        # assign the assets of this section's pages
+        # claim the assets of this section's pages -- each asset for the first section
+        # that touches its page, and for exactly one. Only the emission waits.
         pages_in_sec = {l["page"] for l in sec_lines}
         for pg in sorted(pages_in_sec):
-            for a in tables_by_page.get(pg, []):
-                if not a.get("_used"):
-                    a["_used"] = True
-                    out_sec["tables"].append({k2: v for k2, v in a.items()
-                                              if k2 not in ("y", "_used")})
-            for a in figures_by_page.get(pg, []):
-                if not a.get("_used"):
-                    a["_used"] = True
-                    out_sec["figures"].append({k2: v for k2, v in a.items()
-                                               if k2 not in ("y", "_used")})
+            for key, by_page in (("tables", tables_by_page), ("figures", figures_by_page)):
+                for a in by_page.get(pg, []):
+                    if not a.get("_used"):
+                        a["_used"] = True
+                        asset_claims.append((len(sections), key, a))
         sections.append(out_sec)
+
+    # every caption has been written by now: emit the assets in the order they were
+    # claimed in (section, then page, then collection order)
+    for si, key, a in asset_claims:
+        sections[si][key].append({k2: v for k2, v in a.items()
+                                  if k2 not in ("y", "_used")})
 
     if captions_capped:
         logging.getLogger(__name__).info(
