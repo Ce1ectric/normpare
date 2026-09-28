@@ -251,14 +251,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../concept/" class="md-nav__link">
+      <a href="../usage/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Concept
+    Usage
   
 
     
@@ -278,14 +278,41 @@
   
   
     <li class="md-nav__item">
-      <a href="../usage/" class="md-nav__link">
+      <a href="../results/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Usage
+    Working with the results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concept
   
 
     
@@ -956,7 +983,10 @@ pipeline in one call.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>LLM provider (<code>anthropic</code> | <code>openai</code> | <code>ollama</code> | <code>chat</code>).</p>
+                <p>LLM provider (<code>anthropic</code>, <code>openai</code>, <code>google</code>, <code>mistral</code>,
+<code>groq</code>, <code>together</code>, <code>openrouter</code>, <code>ollama</code> or <code>chat</code>). Providers that
+need a base URL (<code>openai_compatible</code>, <code>azure_openai</code>) are reached through
+:class:<code>~normpare.config.Config</code> and :class:<code>~normpare.pipeline.Pipeline</code>.</p>
               </div>
             </td>
             <td>
@@ -972,7 +1002,8 @@ pipeline in one call.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Model name at the provider (provider default if omitted).</p>
+                <p>Model name at the provider. The default is an Anthropic model, so name the
+model for every other provider.</p>
               </div>
             </td>
             <td>
@@ -988,7 +1019,7 @@ pipeline in one call.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Language of the compared standard (default <code>"de"</code>).</p>
+                <p>Language of the interpretation's free-text output (default <code>"de"</code>).</p>
               </div>
             </td>
             <td>
@@ -1086,17 +1117,18 @@ document metadata.</p>
     <table>
       <thead>
         <tr>
-          <th>Type</th>
+<th>Name</th>          <th>Type</th>
           <th>Description</th>
         </tr>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td>
+<td><code>result</code></td>            <td>
+                  <code><a class="autorefs autorefs-internal" title="normpare.pipeline.RunResult" href="#normpare.pipeline.RunResult">RunResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A <code>RunResult</code> with the paths of the produced artifacts.</p>
+                <p>The paths of the produced artifacts.</p>
               </div>
             </td>
           </tr>
@@ -1158,7 +1190,11 @@ document metadata.</p>
 <span class="normal">65</span>
 <span class="normal">66</span>
 <span class="normal">67</span>
-<span class="normal">68</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compare</span><span class="p">(</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compare</span><span class="p">(</span>
     <span class="n">old</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
     <span class="n">new</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
     <span class="n">out_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
@@ -1181,9 +1217,13 @@ document metadata.</p>
 <span class="sd">        old: Path to the old version of the standard (PDF or DOCX).</span>
 <span class="sd">        new: Path to the new version of the standard (PDF or DOCX).</span>
 <span class="sd">        out_dir: Target directory for all output.</span>
-<span class="sd">        provider: LLM provider (``anthropic`` | ``openai`` | ``ollama`` | ``chat``).</span>
-<span class="sd">        model: Model name at the provider (provider default if omitted).</span>
-<span class="sd">        language: Language of the compared standard (default ``&quot;de&quot;``).</span>
+<span class="sd">        provider: LLM provider (``anthropic``, ``openai``, ``google``, ``mistral``,</span>
+<span class="sd">            ``groq``, ``together``, ``openrouter``, ``ollama`` or ``chat``). Providers that</span>
+<span class="sd">            need a base URL (``openai_compatible``, ``azure_openai``) are reached through</span>
+<span class="sd">            :class:`~normpare.config.Config` and :class:`~normpare.pipeline.Pipeline`.</span>
+<span class="sd">        model: Model name at the provider. The default is an Anthropic model, so name the</span>
+<span class="sd">            model for every other provider.</span>
+<span class="sd">        language: Language of the interpretation&#39;s free-text output (default ``&quot;de&quot;``).</span>
 <span class="sd">        use_llm: If ``False``, produce only the deterministic outputs (skip interpretation).</span>
 <span class="sd">        batch: If ``True``, submit the interpretation as one Anthropic message batch</span>
 <span class="sd">            (~50% cheaper, asynchronous).</span>
@@ -1194,7 +1234,7 @@ document metadata.</p>
 <span class="sd">            document metadata.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        A ``RunResult`` with the paths of the produced artifacts.</span>
+<span class="sd">        result (normpare.pipeline.RunResult): The paths of the produced artifacts.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
@@ -1802,8 +1842,7 @@ module stays cheap and dependency-free.</p>
 
               <details class="quote">
                 <summary>Source code in <code>src/normpare/pipeline.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 46</span>
-<span class="normal"> 47</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 47</span>
 <span class="normal"> 48</span>
 <span class="normal"> 49</span>
 <span class="normal"> 50</span>
@@ -1932,7 +1971,39 @@ module stays cheap and dependency-free.</p>
 <span class="normal">173</span>
 <span class="normal">174</span>
 <span class="normal">175</span>
-<span class="normal">176</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Pipeline</span><span class="p">:</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Pipeline</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs the comparison stages for a :class:`Config` and writes artifacts to ``out_dir``.&quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Config</span><span class="p">):</span>
@@ -1949,6 +2020,9 @@ module stays cheap and dependency-free.</p>
             <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">STAGES</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown stage: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)()</span>
+        <span class="c1"># every run says what produced it: version, inputs with hash, parameters,</span>
+        <span class="c1"># schema version (ENT-29)</span>
+        <span class="n">write_manifest</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">stages</span><span class="o">=</span><span class="n">names</span><span class="p">,</span> <span class="n">use_llm</span><span class="o">=</span><span class="n">use_llm</span><span class="p">)</span>
         <span class="n">run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">run_name</span>
         <span class="k">return</span> <span class="n">RunResult</span><span class="p">(</span>
             <span class="n">out_dir</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">run_name</span><span class="o">=</span><span class="n">run</span><span class="p">,</span>
@@ -1984,7 +2058,11 @@ module stays cheap and dependency-free.</p>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">load_backend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">similarity</span><span class="p">)</span>
         <span class="n">records</span> <span class="o">=</span> <span class="n">build_section_mapping</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">,</span> <span class="n">backend</span><span class="p">)</span>
         <span class="n">_write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;mapping.json&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;pair&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">pair_label</span><span class="p">,</span> <span class="s2">&quot;records&quot;</span><span class="p">:</span> <span class="n">records</span><span class="p">})</span>
-        <span class="n">_write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;alt&quot;</span> <span class="o">/</span> <span class="s2">&quot;norm_doc.json&quot;</span><span class="p">,</span> <span class="n">old</span><span class="p">)</span>  <span class="c1"># synthetic titles were added in place</span>
+        <span class="c1"># ``build_section_mapping`` inserted the titles of absorbed sections as synthetic</span>
+        <span class="c1"># paragraphs in place, so the file is written back. From here on the artifact is</span>
+        <span class="c1"># no longer the pure enrich state: it is the state after ``map``, and anything</span>
+        <span class="c1"># that recomputes from it has to remove those paragraphs first (tools/replay.py).</span>
+        <span class="n">_write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;alt&quot;</span> <span class="o">/</span> <span class="s2">&quot;norm_doc.json&quot;</span><span class="p">,</span> <span class="n">old</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">align</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.stages.align.paras</span><span class="w"> </span><span class="kn">import</span> <span class="n">align_document</span>
@@ -1993,28 +2071,41 @@ module stays cheap and dependency-free.</p>
         <span class="n">new</span> <span class="o">=</span> <span class="n">_load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;neu&quot;</span> <span class="o">/</span> <span class="s2">&quot;norm_doc.json&quot;</span><span class="p">,</span> <span class="s2">&quot;ingest&quot;</span><span class="p">)</span>
         <span class="n">mapping</span> <span class="o">=</span> <span class="n">_load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;mapping.json&quot;</span><span class="p">,</span> <span class="s2">&quot;map&quot;</span><span class="p">)</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">load_backend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">similarity</span><span class="p">)</span>
+        <span class="n">align_stats</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;moved&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">align_document</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">,</span> <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;records&quot;</span><span class="p">],</span> <span class="n">backend</span><span class="p">,</span>
-                                          <span class="n">tau</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">tau</span><span class="p">,</span> <span class="n">tau_moved</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">tau_moved</span><span class="p">)</span>
+                                          <span class="n">tau</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">tau</span><span class="p">,</span> <span class="n">tau_moved</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">tau_moved</span><span class="p">,</span>
+                                          <span class="n">stats</span><span class="o">=</span><span class="n">align_stats</span><span class="p">)</span>
+        <span class="c1"># AP-24: halves of split paragraphs taken into the existing pairing, and candidates</span>
+        <span class="c1"># left lying because their old paragraph had already taken one (console only)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  [align] Geteilte Absätze zusammengeführt: &quot;</span>
+              <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">align_stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;split_absorbed&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+              <span class="sa">f</span><span class="s2">&quot; (liegen geblieben: </span><span class="si">{</span><span class="n">align_stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;split_skipped&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">embed_fallback</span><span class="p">:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">.stages.align.paras</span><span class="w"> </span><span class="kn">import</span> <span class="n">embed_rescue_pass</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">.stages.align.paras</span><span class="w"> </span><span class="kn">import</span> <span class="n">embed_move_pass</span><span class="p">,</span> <span class="n">embed_rescue_pass</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">.text.similarity</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_embed_backend</span>
             <span class="n">embed</span> <span class="o">=</span> <span class="n">load_embed_backend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">embed_model</span><span class="p">,</span>
                                        <span class="n">cache_path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;.vec_cache.npz&quot;</span><span class="p">)</span>
             <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;embed_rescue&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">embed_rescue_pass</span><span class="p">(</span>
                 <span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">,</span> <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;records&quot;</span><span class="p">],</span> <span class="n">embed</span><span class="p">,</span> <span class="n">tau_embed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">tau_embed</span><span class="p">)</span>
+            <span class="c1"># AP-26: after the in-chapter rescue, the cross-chapter moves -- with the</span>
+            <span class="c1"># check rule, so a move is only claimed where it is proven</span>
+            <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;embed_moves&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">embed_move_pass</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">,</span> <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;records&quot;</span><span class="p">],</span> <span class="n">embed</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">embed</span><span class="p">,</span> <span class="s2">&quot;cache&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">embed</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
         <span class="n">_write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;mapping.json&quot;</span><span class="p">,</span> <span class="n">mapping</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">synopse</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.stages.diff</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_synopse</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.stages.review_removed</span><span class="w"> </span><span class="kn">import</span> <span class="n">write_review_removed</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.text.similarity</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_backend</span>
         <span class="n">old</span> <span class="o">=</span> <span class="n">_load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;alt&quot;</span> <span class="o">/</span> <span class="s2">&quot;norm_doc.json&quot;</span><span class="p">,</span> <span class="s2">&quot;ingest&quot;</span><span class="p">)</span>
         <span class="n">new</span> <span class="o">=</span> <span class="n">_load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;neu&quot;</span> <span class="o">/</span> <span class="s2">&quot;norm_doc.json&quot;</span><span class="p">,</span> <span class="s2">&quot;ingest&quot;</span><span class="p">)</span>
         <span class="n">mapping</span> <span class="o">=</span> <span class="n">_load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;mapping.json&quot;</span><span class="p">,</span> <span class="s2">&quot;align&quot;</span><span class="p">)</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">load_backend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">similarity</span><span class="p">)</span>
-        <span class="n">build_synopse</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">,</span> <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;records&quot;</span><span class="p">],</span> <span class="n">backend</span><span class="p">,</span>
-                      <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;synopse.json&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">pair_label</span><span class="p">)</span>
+        <span class="n">syn</span> <span class="o">=</span> <span class="n">build_synopse</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">,</span> <span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;records&quot;</span><span class="p">],</span> <span class="n">backend</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;synopse.json&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">pair_label</span><span class="p">)</span>
+        <span class="c1"># the removals worth a second look -- deterministic, so it is complete with --no-llm</span>
+        <span class="n">write_review_removed</span><span class="p">(</span><span class="n">syn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="s2">&quot;review_removed.json&quot;</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">keywords</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.stages.keywords</span><span class="w"> </span><span class="kn">import</span> <span class="n">assign_keywords</span>
@@ -2038,10 +2129,13 @@ module stays cheap and dependency-free.</p>
                     <span class="n">title</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">new</span><span class="o">.</span><span class="n">title</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">pair_label</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.report.changes_csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_changes_csv</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.report.component_view</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_component_view</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.report.csv_export</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_tables_csv</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.report.dossier_report</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_dossier</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.report.html</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_annotated_html</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.report.pptx</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_pptx</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.report.review_list</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_review_list</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.report.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_statistics</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.report.synopse_det</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_docx_synopse</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.report.synopse_final</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_final_synopse</span>
@@ -2063,6 +2157,14 @@ module stays cheap and dependency-free.</p>
         <span class="k">if</span> <span class="n">deut</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">build_final_synopse</span><span class="p">(</span><span class="n">syn</span><span class="p">,</span> <span class="n">deut</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;Synopse_final_</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">.docx&quot;</span><span class="p">,</span> <span class="n">pair</span><span class="p">)</span>
         <span class="n">build_pptx</span><span class="p">(</span><span class="n">syn</span><span class="p">,</span> <span class="n">deut</span><span class="p">,</span> <span class="n">stats</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;Aenderungen_</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">.pptx&quot;</span><span class="p">,</span> <span class="n">pair</span><span class="p">)</span>
+        <span class="c1"># the readable side of review_removed.json (AP-11); needs no interpretation</span>
+        <span class="n">build_review_list</span><span class="p">(</span><span class="n">syn</span><span class="p">,</span> <span class="n">new</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;Pruefliste_entfallen_</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">.md&quot;</span><span class="p">,</span> <span class="n">pair</span><span class="p">)</span>
+        <span class="c1"># the four axes, made visible (AP-17): one row per interpretation for the</span>
+        <span class="c1"># spreadsheet, and the same material grouped by affected component for a reader.</span>
+        <span class="c1"># Both are written for a run without interpretation too -- then they are empty.</span>
+        <span class="n">build_changes_csv</span><span class="p">(</span><span class="n">syn</span><span class="p">,</span> <span class="n">deut</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;Aenderungen_</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">.csv&quot;</span><span class="p">)</span>
+        <span class="n">build_component_view</span><span class="p">(</span><span class="n">syn</span><span class="p">,</span> <span class="n">deut</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;Aenderungen_nach_Komponente_</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">.md&quot;</span><span class="p">,</span>
+                             <span class="n">pair</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
               </details>
 
@@ -2093,8 +2195,7 @@ module stays cheap and dependency-free.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/normpare/pipeline.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">54</span>
-<span class="normal">55</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">55</span>
 <span class="normal">56</span>
 <span class="normal">57</span>
 <span class="normal">58</span>
@@ -2112,7 +2213,11 @@ module stays cheap and dependency-free.</p>
 <span class="normal">70</span>
 <span class="normal">71</span>
 <span class="normal">72</span>
-<span class="normal">73</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stages</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">use_llm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunResult</span><span class="p">:</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stages</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">use_llm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunResult</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Run the given stage(s) in order. ``use_llm=False`` skips the interpretation stage.&quot;&quot;&quot;</span>
     <span class="n">names</span> <span class="o">=</span> <span class="n">STAGES</span> <span class="k">if</span> <span class="n">stages</span> <span class="o">==</span> <span class="s2">&quot;all&quot;</span> <span class="k">else</span> <span class="p">([</span><span class="n">stages</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stages</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="n">stages</span><span class="p">))</span>
     <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
@@ -2121,6 +2226,9 @@ module stays cheap and dependency-free.</p>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">STAGES</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown stage: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)()</span>
+    <span class="c1"># every run says what produced it: version, inputs with hash, parameters,</span>
+    <span class="c1"># schema version (ENT-29)</span>
+    <span class="n">write_manifest</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">stages</span><span class="o">=</span><span class="n">names</span><span class="p">,</span> <span class="n">use_llm</span><span class="o">=</span><span class="n">use_llm</span><span class="p">)</span>
     <span class="n">run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">run_name</span>
     <span class="k">return</span> <span class="n">RunResult</span><span class="p">(</span>
         <span class="n">out_dir</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">run_name</span><span class="o">=</span><span class="n">run</span><span class="p">,</span>
@@ -2173,8 +2281,7 @@ module stays cheap and dependency-free.</p>
 
               <details class="quote">
                 <summary>Source code in <code>src/normpare/pipeline.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">21</span>
-<span class="normal">22</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">22</span>
 <span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
@@ -2185,7 +2292,8 @@ module stays cheap and dependency-free.</p>
 <span class="normal">30</span>
 <span class="normal">31</span>
 <span class="normal">32</span>
-<span class="normal">33</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span>
+<span class="normal">33</span>
+<span class="normal">34</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">RunResult</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Paths of the artifacts produced by a run.&quot;&quot;&quot;</span>
 

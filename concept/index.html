@@ -13,10 +13,10 @@
         <link rel="canonical" href="https://ce1ectric.github.io/normpare/concept/">
       
       
-        <link rel="prev" href="..">
+        <link rel="prev" href="../results/">
       
       
-        <link rel="next" href="../usage/">
+        <link rel="next" href="../providers/">
       
       
         
@@ -250,6 +250,60 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with the results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -324,10 +378,65 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-counts-as-a-change" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What counts as a change
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-four-axes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The four axes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-axes-against-what-the-pipeline-knows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The axes against what the pipeline knows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-evidence-guard" class="md-nav__link">
     <span class="md-ellipsis">
       
         The evidence guard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#values-in-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Values in tables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coverage-what-was-asked-and-what-came-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage: what was asked, and what came back
       
     </span>
   </a>
@@ -345,37 +454,21 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#known-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known limits
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../usage/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Usage
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -472,6 +565,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-counts-as-a-change" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What counts as a change
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-four-axes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The four axes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-axes-against-what-the-pipeline-knows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The axes against what the pipeline knows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-evidence-guard" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -483,10 +609,43 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#values-in-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Values in tables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coverage-what-was-asked-and-what-came-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage: what was asked, and what came back
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#outputs-in-the-target-directory" class="md-nav__link">
     <span class="md-ellipsis">
       
         Outputs (in the target directory)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known limits
       
     </span>
   </a>
@@ -548,11 +707,11 @@ so runs are inspectable and resumable.</p>
 </tr>
 <tr>
 <td><strong>align</strong></td>
-<td>align paragraphs within mapped chapters; detect moved / split / merged</td>
+<td>align paragraphs within mapped chapters; detect moved, split and merged passages</td>
 </tr>
 <tr>
 <td><strong>synopse</strong></td>
-<td>the change diff — syntactic (exact character/token) and semantic (N3) levels, parameter-value changes, modality shifts, table and formula diffs</td>
+<td>the change diff — syntactic (exact character/token) and semantic (N3) levels, parameter-value changes, modality shifts, formula diffs, and tables paired over caption or cell content, across chapter boundaries where needed</td>
 </tr>
 <tr>
 <td><strong>keywords</strong></td>
@@ -560,7 +719,7 @@ so runs are inspectable and resumable.</p>
 </tr>
 <tr>
 <td><strong>deutung</strong></td>
-<td>per-chapter AI interpretation (summaries, per-change meaning and impact) with an evidence guard — optional, skipped with <code>--no-llm</code></td>
+<td>per-chapter AI interpretation (summaries, per-change meaning and impact) on four axes, with an evidence guard — optional, skipped with <code>--no-llm</code></td>
 </tr>
 <tr>
 <td><strong>report</strong></td>
@@ -568,27 +727,308 @@ so runs are inspectable and resumable.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="what-counts-as-a-change">What counts as a change</h2>
+<p>The paragraph alignment classifies every difference it finds. The <code>kind</code> of a change is
+deterministic and is never asked of a model:</p>
+<table>
+<thead>
+<tr>
+<th><code>kind</code></th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>new</code> / <code>removed</code></td>
+<td>a passage without a counterpart in the other edition</td>
+</tr>
+<tr>
+<td><code>similar</code></td>
+<td>a paired passage whose wording changed</td>
+</tr>
+<tr>
+<td><code>cosmetic</code></td>
+<td>a paired passage whose wording changed without changing the statement</td>
+</tr>
+<tr>
+<td><code>split</code> / <code>merged</code></td>
+<td>one passage became several, or several became one</td>
+</tr>
+<tr>
+<td><code>moved_in</code> / <code>moved_away</code></td>
+<td>the same passage at a different place — seen from the new and from the old side</td>
+</tr>
+</tbody>
+</table>
+<p>A move is only ever claimed <strong>with evidence</strong>: either the assignment finds the pair above
+the similarity threshold — a stricter one for short passages, where a low bar pairs anything
+— or the passage sits between two other moves into the same new chapter and travels with
+them. A passage the aligner cannot place stays <code>removed</code> and, if its text is demonstrably
+still somewhere in the new edition, appears in the review list described below. A third
+route exists only on request: <code>--embed-fallback</code> adds an embedding-based rescue, described
+under <a href="../usage/#alignment-deterministic-default-and-optional-embedding-cascade">Usage</a>.</p>
+<p>A move is <strong>one</strong> event with <strong>two</strong> change records, and both are always written — also
+when one side sits in a chapter that has no counterpart at all, where the passage would
+otherwise be reported a second time as an addition or a deletion, so that one change is
+counted twice. The pointer between the two records is evidence or it is not written: where
+a move has no target record, the change names the target <em>chapter</em> (<code>moved_to_chapter</code>)
+instead of the target paragraph, the same way a passage that travelled inside a block
+does.</p>
+<h2 id="the-four-axes">The four axes</h2>
+<p>Where a single label would have to carry three statements at once, normpare asks four
+independent questions about each change:</p>
+<table>
+<thead>
+<tr>
+<th>Axis</th>
+<th>Field</th>
+<th>Vocabulary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A</strong> — the structural operation</td>
+<td><code>structural_operation</code></td>
+<td><code>added</code>, <code>removed</code>, <code>modified</code>, <code>merged</code>, <code>split</code>, <code>moved</code>, <code>unchanged</code></td>
+</tr>
+<tr>
+<td><strong>B</strong> — what happens to the statement</td>
+<td><code>semantic_status</code></td>
+<td><code>equivalent</code>, <code>clarified</code>, <code>extended</code>, <code>narrowed</code>, <code>replaced</code>, <code>contradictory</code>, <code>indeterminate</code></td>
+</tr>
+<tr>
+<td><strong>C</strong> — what it means for whoever is bound</td>
+<td><code>normative_direction</code></td>
+<td><code>tightened</code>, <code>relaxed</code>, <code>unchanged</code>, <code>not_applicable</code>, <code>indeterminate</code></td>
+</tr>
+<tr>
+<td><strong>D</strong> — which components are touched</td>
+<td><code>affected_components</code></td>
+<td><code>proof_obligation</code>, <code>limit_value</code>, <code>procedure</code>, <code>deadline</code>, <code>responsibility</code>, <code>documentation</code>, <code>scope</code>, <code>definition</code>, <code>reference</code>, <code>formula</code>, <code>note</code>, <code>heading</code>, <code>caption</code>, <code>example</code>, <code>none</code>, or <code>other:&lt;label&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>Axis A is <strong>derived from the change itself</strong>, not asked of the model. Axis B is about scope
+and wording, axis C about strictness — <code>narrowed</code> means "covers fewer cases", never
+"stricter". A value outside its vocabulary is discarded and reported, never silently
+corrected, and an axis may abstain with <code>indeterminate</code> plus an <code>indeterminate_reason</code>.</p>
+<p>For a change <strong>without</strong> a counterpart axis B describes what happens to the body of
+statements: added text is <code>extended</code>, text dropped without replacement is <code>narrowed</code>, and
+<code>replaced</code> where a successor or predecessor is recognisable elsewhere. <code>equivalent</code> is
+admissible only where the change record is no real change at all — a torn sentence, a
+duplicate, a formatting artefact — and then the record has to be reported in
+<code>pipeline_feedback</code>. Without that report <code>equivalent</code> is wrong here.</p>
+<p>A move is one event with two change records, one in the old chapter and one in the new
+one, and axis B describes the <strong>text</strong>, not the place: unchanged moved text is
+<code>equivalent</code>, text reworded on the way takes the value that describes the rewording, and
+<code>replaced</code> stays with a change whose counterpart is not connected by a move. Axis C says
+what the <em>relocation</em> means for whoever is bound, and that is nothing: <code>unchanged</code> where
+the moved text carries a duty, <code>not_applicable</code> where it does not, the same value on both
+sides, and <code>tightened</code>/<code>relaxed</code> only where the text was changed on the way.</p>
+<p>Both rules are answerable because the prompt shows the move from both sides. A change
+record of a move carries only its own half — the old text where the passage left, the new
+text where it arrived — so the request resolves the counterpart over the pointer and shows
+it under the label of its side. Where the pointer names only the chapter, or names a
+paragraph the document does not have, nothing is added: no placeholder and no guess.</p>
+<h2 id="the-axes-against-what-the-pipeline-knows">The axes against what the pipeline knows</h2>
+<p>The pipeline knows three things about a change without asking anybody: its structural
+operation, which paragraph a move went to, and whether the changed sentences carry a modal
+verb. Four checks hold the interpretation against them, and all four <strong>mark without
+correcting</strong> — the reported value stays where it is:</p>
+<ul>
+<li><code>axis_partner_disagreement</code> — the two records of one move are joined over the pointer the
+  paragraph aligner left behind and compared on axes B and C. A difference is flagged on
+  <strong>both</strong> sides, with the other side's value. A move whose pointer names only the chapter
+  is not compared.</li>
+<li><code>axis_b_contradicts_a</code> — <code>equivalent</code> for a change that has no counterpart at all. Where
+  the chapter reports that very change in its <code>pipeline_feedback</code>, the record is counted
+  <strong>apart</strong> instead: there the kind of the change is what is being disputed, at the place
+  provided for it, and <code>equivalent</code> is the most honest answer the vocabulary offers. Both
+  numbers are reported, at zero as well, and the flag stays on the record either way.</li>
+<li><code>axis_c_contradicts_modality</code> — a change with a modal sentence called non-normative. The
+  reverse case (informative text with a direction) is counted only, never flagged: the
+  modality detection is not certain enough there.</li>
+<li><code>successor_named</code> — a <code>narrowed</code> change whose own free text names the section the rule
+  moved to.</li>
+</ul>
+<p>Two guards of the deterministic stage sit next to them and must read zero: a <code>moved_away</code>
+pointing at a paragraph nobody reports as <code>moved_in</code>, and a <code>moved_in</code> naming a source
+nobody reports as <code>moved_away</code>. Either one means one event counted twice.</p>
+<p>The counts reach <code>pipeline_feedback</code>; <code>tools/axis_consistency.py</code> recomputes all of them
+over one or more finished runs, offline.</p>
 <h2 id="the-evidence-guard">The evidence guard</h2>
 <p>Every interpretation the model produces must include a short <strong>verbatim quote</strong> from the old
-or the new text. After the model answers, normpare checks that this quote actually occurs in
-the source. The result is stored per entry as <code>evidence_ok</code>, and anything that fails the
-check — or that the model itself flagged as contradictory — lands in a <strong>review queue</strong> in
-<code>deutung.json</code>.</p>
+or the new text. After the model answers, normpare locates the quoted span in the answer
+(a label in front of a correct quote does not count against it) and checks that it occurs
+in the text of the change the interpretation addresses — its old and new side. It records
+per entry:</p>
+<ul>
+<li><code>evidence_ok</code> — the quote was found (its first 15 characters, or the whole quote; a
+  quote under 15 characters passes only if it is the entire text of the change, which in
+  practice means a pure addition or deletion),</li>
+<li><code>evidence_strict</code> — the quote was found in full, the fragments between ellipsis marks
+  checked separately,</li>
+<li><code>evidence_match_chars</code> / <code>evidence_fragments</code> — how many characters matched, and how
+  many ellipsis-separated fragments the quote has,</li>
+<li><code>change_index_disputed</code> — another change of the same chapter fits the quote better. The
+  case is flagged and never corrected.</li>
+</ul>
+<p>A table or figure interpretation is checked against the whole chapter instead — captions,
+cells and paragraphs — with a slightly different rule for quotes that render a table row.</p>
+<p>An interpretation whose quote fails <code>evidence_ok</code>, whose change index is disputed, or that
+the model itself flagged as contradictory lands in a <strong>review queue</strong> in <code>deutung.json</code>
+with the reason attached — as do the two axis findings <code>axis_partner_disagreement</code> and
+<code>successor_named</code> described above. <code>evidence_strict</code> and <code>evidence_unique</code> are reported,
+not queued.</p>
 <p>This turns model quality into something you can measure rather than trust: a strong model
-verifies at well over 90 %, a weak one collapses because it paraphrases instead of quoting.
-See <a href="../providers/#choosing-a-model-measure-do-not-guess">LLM providers</a>.</p>
+verifies at well over 90 %, and the gap to a weak one is large.
+See <a href="../providers/#choosing-a-model-measure-do-not-guess">LLM providers</a>.
+<a href="../results/#the-review-queue">Working with the results</a> explains each review reason.</p>
+<h2 id="values-in-tables">Values in tables</h2>
+<p>The deterministic value diff reads paragraph text. Values in table cells are extracted
+too — every table in <code>norm_doc.json</code> carries <code>cell_values</code>, the numbers of each cell read
+with the rules of a cell, where the unit stands in the column heading and a bare number
+with a decimal place counts (a whole number without a unit does not: it would match row
+numbers and footnote marks) — but no deterministic stage compares them.
+<code>statistics.json → comparison → cell_values_unexamined</code> says how many there are, so that
+an empty <code>kennwert_changes</code> is never read as "no value changed".</p>
+<p>What an AI run says about a table is checked against those cells instead. A table
+interpretation names its table (<code>table_ref</code>); the pipeline resolves that name to one table
+of the chapter and writes the result as <code>table_id</code> — the model says which table it means,
+the pipeline decides which table that is. Every value the entry claims in
+<code>value_changes</code> — read with the same rules as a cell — is then looked up in the cells: the
+old half of an arrow in the old edition, the new half in the new one, a value without an
+arrow in both, and both halves in the one edition a table without counterpart has. The
+entry records</p>
+<ul>
+<li><code>values_checked</code> / <code>values_found</code> — how many values were recognised, and how many of
+  them stand in the named table,</li>
+<li><code>values_ok</code> — all of them do (also <code>true</code> when nothing could be checked, so read it
+  together with <code>values_checked</code>),</li>
+<li><code>values_elsewhere</code> — how many of the missing ones stand in another table of the same
+  chapter.</li>
+</ul>
+<p>A failed check puts the entry into the review queue as <code>values_ok</code>, or as the weaker
+<code>values_in_other_table</code> when every missing number is accounted for in a neighbouring
+table. An entry that names no table of its chapter cannot be checked; it is counted as
+<strong>unchecked</strong> in <code>pipeline_feedback</code>, never as wrong. The check proves that a number is in
+the table; it cannot prove that the number sits in the row or column the text assigns it
+to.</p>
+<h2 id="coverage-what-was-asked-and-what-came-back">Coverage: what was asked, and what came back</h2>
+<p>The interpretation stage is the only part that can silently lose material, so it counts
+separately what there was, what was asked and what came back, and prints all of it:</p>
+<div class="highlight"><pre><span></span><code>Änderungen: 1103, vorgelegt 1101, gedeutet 1101 (99,8 %)
+  ohne Antwort: 0
+</code></pre></div>
+<ul>
+<li><code>n_changes_total</code> — every change of the comparison,</li>
+<li><code>n_changes</code> — those a prompt actually asked about; the difference are chapters whose
+  changes are all equal on the semantic level (N3) and are therefore not asked about,</li>
+<li><code>n_interpreted</code> — those an answer came back for, counted <strong>after</strong> the answers are merged,</li>
+<li><code>n_unanswered</code> — asked about, but no interpretation returned. When this is not zero, the
+  affected chapters are named on the console, the component view carries the note inline,
+  and the CSV gets a companion file <code>Aenderungen_&lt;run&gt;_Abdeckung.txt</code> beside it — a warning
+  cannot go <em>into</em> a CSV without breaking it. A later complete run deletes that file again,
+  so a stale warning cannot survive in the directory.</li>
+</ul>
+<p>The percentage is <code>n_interpreted</code> over <code>n_changes_total</code>, so a complete run over a
+standard with purely cosmetic chapters shows slightly less than 100 %.</p>
+<p>A chapter with more changes than fit into one request is split into numbered part requests;
+<code>n_split_chapters</code> and <code>n_extra_requests</code> record how often.</p>
 <h2 id="outputs-in-the-target-directory">Outputs (in the target directory)</h2>
+<p><strong>Documents</strong></p>
 <ul>
 <li><code>annotiert_&lt;run&gt;.html</code> — the new version with colour-marked changes, chapter summaries,
-  cell-diffed tables and embedded figures.</li>
+  cell-diffed tables and embedded figures (figures from DOCX sources only; a PDF figure
+  shows as a placeholder).</li>
 <li><code>Synopse_deterministisch_&lt;run&gt;.docx</code> — tabular old ↔ new change synopsis (always).</li>
-<li><code>Synopse_final_&lt;run&gt;.docx</code> — the AI-interpreted, human-readable per-chapter synopsis that
-  bundles several change lines into one entry (only with an AI run).</li>
+<li><code>Synopse_final_&lt;run&gt;.docx</code> — the AI-interpreted, human-readable synopsis: one entry per
+  chapter, most training-relevant first, with an overview and every interpreted change
+  (written whenever a <code>deutung.json</code> exists — see below).</li>
 <li><code>Aenderungen_&lt;run&gt;.pptx</code> — a training slide draft of the key changes.</li>
-<li><code>synopse.json</code>, <code>chapters.json</code>, <code>statistics.json</code>, <code>keywords.json</code>, <code>mapping.json</code> —
-  machine-readable intermediates.</li>
-<li><code>alt/</code> and <code>neu/</code> — the per-version <code>norm_doc.json</code> plus <code>assets/</code> (images, and each table
-  as a CSV under <code>assets/tables/</code>).</li>
+</ul>
+<p><strong>Working lists</strong></p>
+<ul>
+<li><code>Aenderungen_&lt;run&gt;.csv</code> — one row <strong>per interpretation</strong>, with its four axes, for a
+  spreadsheet (UTF-8 with BOM, semicolon-separated, so a double click in a German Excel
+  keeps its umlauts and columns). A change without an interpretation has no row here, which
+  is what the companion <code>_Abdeckung.txt</code> warns about; without a <code>deutung.json</code> the file
+  has its header only.</li>
+<li><code>Aenderungen_nach_Komponente_&lt;run&gt;.md</code> — the same material grouped by affected component,
+  for a reader.</li>
+<li><code>Pruefliste_entfallen_&lt;run&gt;.md</code> — passages reported as removed whose text is demonstrably
+  still in the new edition, with the reason: found outside the mapped sections, missed
+  inside them, or a move the check could not confirm. An unbalanced chapter mapping is
+  shown as an additional reason and used for sorting, but never puts a passage on the list
+  by itself. The list <strong>marks, it does not filter</strong>: nothing is removed from the change
+  stream.</li>
+</ul>
+<p><strong>Machine-readable</strong></p>
+<ul>
+<li><code>synopse.json</code>, <code>chapters.json</code>, <code>statistics.json</code>, <code>keywords.json</code>, <code>mapping.json</code>,
+  <code>review_removed.json</code>, and <code>deutung.json</code> when the interpretation stage ran.</li>
+<li>Every change record in <code>synopse.json</code> carries <strong><code>section_old</code></strong> and <strong><code>section_new</code></strong>:
+  the section its first paragraph sits in on each side, <code>null</code> where that side is empty.
+  A chapter mapping is headed by one section, and depending on the standard between a
+  quarter and four in ten changes stand in a subsection of it, so the block title and the
+  place to look up are not the same thing. The sections come from the
+  paragraph-to-section assignment of <code>norm_doc.json</code>, not from the shape of the paragraph
+  id, and the reports show them next to a single change where they differ from the
+  chapter head.</li>
+<li><code>manifest.json</code> — inputs with their SHA-256, the stages that ran (with <code>use_llm</code>
+  telling a deterministic run from an interpreted one), and every parameter of the run.</li>
+<li><code>pipeline_feedback.md</code> — what the interpretation noticed: axis violations, truncated
+  answers, unanswered changes, and what the model reported back about the extraction.
+  Written by the interpretation stage.</li>
+</ul>
+<p>The interpretation stage runs unless <code>--no-llm</code> is given, also without a key: it then
+exports the prompts and still writes <code>deutung.json</code> (without interpretations) and
+<code>pipeline_feedback.md</code>. The report stage uses whatever <code>deutung.json</code> is in the directory
+— so a <code>--no-llm</code> run into the directory of an earlier AI run reports that run's
+interpretation. Run a deterministic comparison into a fresh directory.
+- <code>alt/</code> and <code>neu/</code> — the per-version <code>norm_doc.json</code> plus <code>assets/</code> (images, and each table
+  as a CSV under <code>assets/tables/</code>).</p>
+<p><strong>Caches</strong>: <code>.vec_cache.npz</code> (encoded vectors of the embedding pass) is safe to delete and
+cheap to rebuild. <code>llm_cache/</code> (one file per model and prompt, so a repeat run never pays
+twice for a chapter already interpreted) is not cheap: deleting it re-asks — and re-bills
+— every chapter, and the new answers will differ from the old ones. Keep it as long as the
+run matters.</p>
+<p><code>llm_prompts/</code> is <strong>not</strong> a cache and should not be deleted unthinkingly. It holds the
+exported prompts whenever the run cannot ask a model itself — no API key, no base URL, the
+<code>anthropic</code> package missing, or provider <code>chat</code> — and in a live run it is where a truncated
+or unreadable answer lands as <code>&lt;tag&gt;.FAILED.txt</code> (the tag is the chapter mapping id with
+unsafe characters replaced, <code>.T2</code>, <code>.T3</code>, … for later parts), prompt and raw answer
+together. That file is the only copy of what went wrong; the console points at
+<code>llm_prompts/*.FAILED.txt</code>. An API error leaves no file — the console and
+<code>pipeline_feedback</code> name the chapter and the error type.</p>
+<h2 id="known-limits">Known limits</h2>
+<ul>
+<li><strong>Value changes are computed from paragraph text only.</strong> A limit value that lives in a
+  table cell does not appear in <code>statistics.json → comparison → kennwert_changes</code>; the
+  number of such cell values stands beside it as <code>cell_values_unexamined</code>. With an AI run, table values
+  are reported under <code>chapters[].tables[].value_changes</code> in <code>deutung.json</code> and checked
+  against the cells (<a href="#values-in-tables">Values in tables</a>) — a check of presence, not of
+  position.</li>
+<li><strong>A value change is not always a changed number.</strong> Every entry of <code>kennwerte.changed</code>
+  carries <strong><code>value_class</code></strong>: <code>value_changed</code> when the normalized quantity moved,
+  <code>operator_added</code> / <code>operator_removed</code> / <code>operator_changed</code> when only the operator in
+  front of it did. The class is a label, not a verdict — <code>± 5 % → 5 %</code> drops an operator
+  and still narrows the tolerance to one direction — so nothing is filtered by it; the
+  reports only put the changed numbers first.</li>
+<li><strong>The <code>figures</code> count is not a count of figures.</strong> For a PDF it counts placed image
+  objects, so one drawing assembled from many pieces counts many times; for a DOCX it counts
+  embedded drawings. The two are not comparable with each other. Figures are extracted as
+  image files from DOCX only.</li>
+<li><strong>Modality is read from the sentences a change touches.</strong> A requirement stated without a
+  modal verb — a list item under a <code>muss</code> stem, for instance — can be missed, and a
+  reported shift can be a false alarm.</li>
+<li><strong>A table reaches the model with at most 40 rows.</strong> Longer tables are cut with a note in
+  the prompt (<code>… (+n Zeilen)</code>); the console line <code>Tabellen gekürzt</code> counts only the
+  character limit, not this row limit.</li>
+<li><strong>A document is read as delivered.</strong> An international original appended to a national
+  edition is ingested as part of its last chapter and produces spurious changes there.
+  Cut such a PDF to the national pages before the run
+  (<a href="../results/#input-hygiene">Input hygiene</a>).</li>
 </ul>
 
 

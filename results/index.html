@@ -1,0 +1,961 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Compare two editions of a technical standard">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/normpare/results/">
+      
+      
+        <link rel="prev" href="../usage/">
+      
+      
+        <link rel="next" href="../concept/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Working with the results - normpare</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#working-with-the-results" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="normpare" class="md-header__button md-logo" aria-label="normpare" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            normpare
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Working with the results
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/normpare" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="normpare" class="md-nav__button md-logo" aria-label="normpare" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    normpare
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/normpare" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with the results
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with the results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reading-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-a-change-stands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where a change stands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-csv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The CSV
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#value-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value classes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-review-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The review queue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-still-needs-a-human-look" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What still needs a human look
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#input-hygiene" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input hygiene
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-running
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concept
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LLM providers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reading-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-a-change-stands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where a change stands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-csv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The CSV
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#value-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value classes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-review-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The review queue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-still-needs-a-human-look" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What still needs a human look
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#input-hygiene" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input hygiene
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-running
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="working-with-the-results">Working with the results</h1>
+<p>A run writes a dozen files. This page says which one answers which question, where a
+change is to be found in the standard, and what still needs a human look. The file names
+carry the run name, written <code>&lt;run&gt;</code> below; the console and the deliverables are in German,
+because the compared standards are.</p>
+<h2 id="reading-order">Reading order</h2>
+<ol>
+<li>
+<p><strong>Is the run complete?</strong> The console prints the coverage at the end of the
+   interpretation, and <code>deutung.json → coverage</code> keeps it:</p>
+<div class="highlight"><pre><span></span><code>    Änderungen: 1103, vorgelegt 1101, gedeutet 1101 (99,8 %)
+      ohne Antwort: 0
+</code></pre></div>
+<p><code>ohne Antwort</code> has to be <code>0</code>. Anything else means the model skipped changes, a request
+failed, or no model was asked at all (no key); the chapters are named, and a companion
+file <code>Aenderungen_&lt;run&gt;_Abdeckung.txt</code> stands beside the CSV. The percentage is taken
+over <em>all</em> changes, including chapters whose changes are purely cosmetic and are never
+sent to the model — which is why a complete run can show 99,8 %.
+<a href="../concept/#coverage-what-was-asked-and-what-came-back">Concept</a> explains the counts.</p>
+</li>
+<li>
+<p><strong>What changed, chapter by chapter?</strong> <code>Synopse_final_&lt;run&gt;.docx</code> — one entry per
+   chapter, most training-relevant first: an overview, then every interpreted change. It
+   is the AI view; its fact base is <code>Synopse_deterministisch_&lt;run&gt;.docx</code>, which lists every
+   change old ↔ new without interpretation.</p>
+</li>
+<li>
+<p><strong>Which values changed?</strong> <code>statistics.json → comparison → kennwert_changes</code>, the
+   deterministic value diff of the paragraph text, in document order. The deterministic
+   synopsis and the slides show the same list with the changed numbers first and the
+   changes of the operator only (<code>15 MVA → mindestens 15 MVA</code>) after them — see
+   <a href="#value-classes">value classes</a> below.</p>
+</li>
+<li>
+<p><strong>What changed in the tables?</strong> The table interpretations in
+   <code>deutung.json → chapters[].tables[]</code>; their values are checked against the cells of the
+   table they name (<a href="../concept/#values-in-tables">Concept</a>).</p>
+</li>
+<li>
+<p><strong>What needs a second look?</strong> <code>deutung.json → review_queue</code> and
+   <code>Pruefliste_entfallen_&lt;run&gt;.md</code> — see <a href="#the-review-queue">below</a>.</p>
+</li>
+</ol>
+<p><code>annotiert_&lt;run&gt;.html</code> is the new edition with every change marked in place; open it
+when a change has to be read in context.</p>
+<h2 id="where-a-change-stands">Where a change stands</h2>
+<p>The interpretation is organised by <strong>chapter mapping</strong> — a block of the new edition
+matched to a block of the old one. Its head is <code>section_id</code>; <code>mapping_id</code> names both
+sides, the new sections before <code>&lt;</code> and the old ones after it, for example
+<code>3.1&lt;3.1+3.1.1+3.1.10+~cf4ef82c</code> (long lists end in a digest). Depending on the standard,
+between a quarter and four in ten changes do not stand in the head section but in a
+subsection of it. Every change record therefore carries the section its paragraph
+actually sits in:</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>section_old</code></td>
+<td>section of the old edition; empty for an addition and for the arriving side of a move</td>
+</tr>
+<tr>
+<td><code>section_new</code></td>
+<td>section of the new edition; empty for a deletion and for the departing side of a move</td>
+</tr>
+</tbody>
+</table>
+<p>The CSV has both as its last two columns and <code>kennwert_changes</code> has <code>section</code>. The
+reports print the section next to a single change where it differs from the chapter
+head. Look up <code>section_new</code> in the new edition, <code>section_old</code> in the old one.</p>
+<h2 id="the-csv">The CSV</h2>
+<p><code>Aenderungen_&lt;run&gt;.csv</code> has one row per interpretation of a change — tables and figures
+are not in it (UTF-8 with BOM, <code>;</code>-separated, opens directly in a German Excel):</p>
+<p><code>section_id; mapping_id; chapter_title; change_index; change_kind; structural_operation;
+semantic_status; normative_direction; affected_components; indeterminate_reason;
+semantic_label; obligation; change; impact; evidence; evidence_ok; confidence;
+section_old; section_new</code></p>
+<p>Useful filters:</p>
+<ul>
+<li><code>normative_direction = tightened</code> and <code>affected_components</code> contains <code>limit_value</code> or
+  <code>proof_obligation</code> — the changes that most likely cost the reader something;</li>
+<li><code>evidence_ok = false</code> — the quote of this interpretation was not found in the text of
+  the change it addresses; treat the row as unverified;</li>
+<li><code>semantic_status = equivalent</code> — editorial changes, safe to skim, <strong>except</strong> where
+  <code>change_kind</code> is <code>new</code> or <code>removed</code>: a pure addition or deletion cannot be equivalent,
+  and such a row is either an extraction artefact or a wrong reading.</li>
+</ul>
+<p><code>Aenderungen_nach_Komponente_&lt;run&gt;.md</code> carries the same material grouped by affected
+component (axis D), with a count table at the top.</p>
+<h2 id="value-classes">Value classes</h2>
+<p>Each entry of <code>kennwert_changes</code> carries a <code>value_class</code>:</p>
+<table>
+<thead>
+<tr>
+<th><code>value_class</code></th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value_changed</code></td>
+<td><code>mindestens 5 % → mindestens 1 %</code></td>
+</tr>
+<tr>
+<td><code>operator_added</code></td>
+<td><code>15 MVA → mindestens 15 MVA</code></td>
+</tr>
+<tr>
+<td><code>operator_removed</code></td>
+<td><code>± 5 % → 5 %</code></td>
+</tr>
+<tr>
+<td><code>operator_changed</code></td>
+<td><code>≤ 10 s → &lt; 10 s</code></td>
+</tr>
+</tbody>
+</table>
+<p>The class is a label, not a verdict: an operator change can be substantive (<code>± 5 % → 5 %</code>
+narrows the tolerance to one direction). Nothing is filtered by it.</p>
+<p>Values that sit in <strong>table cells</strong> are not in <code>kennwert_changes</code>. How many there are is
+counted beside it in <code>comparison → cell_values_unexamined</code> (<code>old</code>, <code>new</code>, <code>total</code>) — an
+empty <code>kennwert_changes</code> next to a few hundred unexamined cell values does not mean that
+no value changed.</p>
+<h2 id="the-review-queue">The review queue</h2>
+<p><code>deutung.json → review_queue</code> lists the interpretations that failed one of the checks
+below, with the reasons attached. It <strong>marks, it never corrects</strong>: the interpretation stays
+as the model gave it.</p>
+<table>
+<thead>
+<tr>
+<th>reason</th>
+<th>what it means</th>
+<th>what to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>contradiction_flag</code></td>
+<td>the model itself flagged a contradiction</td>
+<td>often an extraction artefact (a torn sentence, a formatting remnant); check whether the chapter reports the same change in its <code>pipeline_feedback</code></td>
+</tr>
+<tr>
+<td><code>evidence_ok</code></td>
+<td>the quote was not found (for a change: in its old and new text; for a table or figure: in the chapter)</td>
+<td>treat the interpretation as unverified</td>
+</tr>
+<tr>
+<td><code>change_index_disputed</code></td>
+<td>another change of the chapter fits the quote better</td>
+<td>compare with <code>change_index_best</code></td>
+</tr>
+<tr>
+<td><code>axis_partner_disagreement</code></td>
+<td>the two records of one move are interpreted differently</td>
+<td>decide which side is right; a move is one event</td>
+</tr>
+<tr>
+<td><code>successor_named</code></td>
+<td>a deletion whose own text names where the rule went</td>
+<td>probably a move or a replacement, not a loss</td>
+</tr>
+<tr>
+<td><code>values_ok</code></td>
+<td>a table interpretation claims values that are not in the cells of its table</td>
+<td>check the values against the table</td>
+</tr>
+<tr>
+<td><code>values_in_other_table</code></td>
+<td>the claimed values stand in another table of the same chapter</td>
+<td>check whether the right table is meant</td>
+</tr>
+</tbody>
+</table>
+<p>Two further flags sit on the records but do not put them into the queue:
+<code>axis_b_contradicts_a</code> (<code>equivalent</code> for a change without counterpart) and
+<code>axis_c_contradicts_modality</code> (a change with a modal verb called <code>not_applicable</code>). Their
+counts are in <code>deutung.json → consistency</code>, and the CSV filter above finds the first.</p>
+<p>To list the queue:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="n">d</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="s2">&quot;OUT/deutung.json&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;review_queue&quot;</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="s2">&quot;section_id&quot;</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;change_index&quot;</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;asset&quot;</span><span class="p">)),</span> <span class="n">e</span><span class="p">[</span><span class="s2">&quot;review_reasons&quot;</span><span class="p">])</span>
+</code></pre></div>
+<p><code>Pruefliste_entfallen_&lt;run&gt;.md</code> is the second list: passages reported as <strong>removed</strong>
+whose text is demonstrably still in the new edition, each with the old text and where it
+stands now.</p>
+<p><code>pipeline_feedback.md</code> collects what the interpretation noticed about the extraction —
+hyphenation carried into the text, formatting remnants, lost formula symbols, suspected
+pairing errors — each with the stage it points at (<code>ingest_pdf</code>, <code>alignment</code>, <code>diff</code>, …).
+It is addressed to whoever maintains the pipeline, but it also explains many
+<code>contradiction_flag</code> entries.</p>
+<h2 id="what-still-needs-a-human-look">What still needs a human look</h2>
+<p>A spot check of fifteen central points across three real standard revisions (made on
+the runs just before this release) found every value change reported by the deterministic
+diff right. One error was an AI statement about a table, one a false alarm of the
+modality detection. Check these by hand:</p>
+<ul>
+<li><strong>AI descriptions of tables.</strong> The value check catches a number that is not in the
+  table. It does not catch a correct number assigned to the wrong row or column, a
+  statement about a table's scope, or a whole number without a unit (those are not
+  recognised as values). <code>values_ok</code> is also <code>true</code> when nothing could be checked
+  (<code>values_checked = 0</code>). Read the table itself before relying on a table
+  interpretation.</li>
+<li><strong>Modality shifts.</strong> A shift such as <code>informativ → muss</code> is detected from the modal
+  verbs of the changed sentences. It can be a false alarm; read the sentence.</li>
+<li><strong>Normative direction.</strong> <code>tightened</code> / <code>relaxed</code> / <code>not_applicable</code> is the model's
+  reading. Only one contradiction is flagged (<code>axis_c_contradicts_modality</code>: a change with
+  a modal verb called <code>not_applicable</code>); a direction reported for informative text is
+  merely counted, and any other value can still be wrong.</li>
+<li><strong>Operator-only value changes.</strong> See <a href="#value-classes">value classes</a>.</li>
+</ul>
+<p>The interpretation is a reading aid with verified quotes, not a legal assessment.</p>
+<h2 id="input-hygiene">Input hygiene</h2>
+<p>normpare reads a document as it is delivered. Two cases need attention before the run:</p>
+<ul>
+<li>
+<p><strong>An appended original in another language.</strong> Some national editions are delivered
+  with the international original appended after the national text. That text is read as
+  part of the last chapter (typically the bibliography), where it becomes hundreds of
+  spurious changes. Signs: a disproportionate share of all changes in the last chapter,
+  changes in the wrong language. Cut the PDF to the national pages first and keep the
+  delivered file untouched:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pymupdf</span>  <span class="c1"># installed with normpare</span>
+
+<span class="n">src</span> <span class="o">=</span> <span class="n">pymupdf</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;delivered.pdf&quot;</span><span class="p">)</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">pymupdf</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+<span class="n">out</span><span class="o">.</span><span class="n">insert_pdf</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">from_page</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">to_page</span><span class="o">=</span><span class="mi">69</span><span class="p">)</span>   <span class="c1"># pages 1-70, zero-based and inclusive</span>
+<span class="n">out</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;delivered_national_only.pdf&quot;</span><span class="p">)</span>
+</code></pre></div>
+</li>
+<li>
+<p><strong>A mix of PDF and DOCX</strong> works, but the two are extracted differently. Figure counts,
+  for instance, are not comparable between them
+  (<a href="../concept/#known-limits">Known limits</a>).</p>
+</li>
+</ul>
+<h2 id="re-running">Re-running</h2>
+<p>Every usable answer is cached in <code>llm_cache/</code>, keyed on the model, the system prompt and
+the chapter prompt. Running the same comparison into the same directory again costs
+nothing for chapters already interpreted, resumes an interrupted run where it stopped and
+re-asks requests whose answer was truncated, unreadable or failed. An answer that parsed
+but skipped changes is cached as it came back, and a re-run returns it unchanged.</p>
+<p>Everything that enters the prompt enters the key: a different model, a changed
+<code>--language</code>, or a <strong>renamed input file</strong> (its name appears in the system prompt) asks
+every chapter again. A new output directory starts with an empty cache; copy <code>llm_cache/</code>
+into it to reuse the answers.</p>
+<p>A <code>--no-llm</code> run into a directory that already holds a <code>deutung.json</code> reuses that file for
+the reports. Run a deterministic comparison into a fresh directory.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

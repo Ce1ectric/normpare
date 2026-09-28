@@ -13,10 +13,10 @@
         <link rel="canonical" href="https://ce1ectric.github.io/normpare/usage/">
       
       
-        <link rel="prev" href="../concept/">
+        <link rel="prev" href="..">
       
       
-        <link rel="next" href="../providers/">
+        <link rel="next" href="../results/">
       
       
         
@@ -250,33 +250,6 @@
       
   
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../concept/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Concept
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
     
   
   
@@ -362,6 +335,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reading-the-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cost-batching-and-caching" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -398,6 +382,60 @@
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with the results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concept
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -505,6 +543,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reading-the-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cost-batching-and-caching" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -559,14 +608,19 @@
 
 <h1 id="usage">Usage</h1>
 <h2 id="installation">Installation</h2>
-<p>Requires <strong>Python 3.13</strong> and <a href="https://python-poetry.org/">Poetry</a>.</p>
+<p>Requires <strong>Python 3.13</strong>.</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>normpare<span class="w">                      </span><span class="c1"># deterministic comparison, OpenAI-compatible AI</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;normpare[anthropic]&quot;</span><span class="w">         </span><span class="c1"># + AI interpretation via Anthropic</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;normpare[embeddings]&quot;</span><span class="w">        </span><span class="c1"># + optional embedding rescue pass</span>
+</code></pre></div>
+<p>From a checkout, with <a href="https://python-poetry.org/">Poetry</a>:</p>
 <div class="highlight"><pre><span></span><code>poetry<span class="w"> </span>install<span class="w"> </span>--with<span class="w"> </span>dev<span class="w">          </span><span class="c1"># optional extras: --extras &quot;anthropic embeddings&quot;</span>
 poetry<span class="w"> </span>run<span class="w"> </span>pytest
 </code></pre></div>
 <h2 id="command-line">Command line</h2>
 <div class="highlight"><pre><span></span><code>normpare<span class="w"> </span>compare<span class="w"> </span>--old<span class="w"> </span>OLD.<span class="o">(</span>pdf<span class="p">|</span>docx<span class="o">)</span><span class="w"> </span>--new<span class="w"> </span>NEW.<span class="o">(</span>pdf<span class="p">|</span>docx<span class="o">)</span><span class="w"> </span>--out<span class="w"> </span>TARGET/<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="o">[</span>--provider<span class="w"> </span>anthropic<span class="p">|</span>openai<span class="p">|</span>ollama<span class="p">|</span>chat<span class="o">]</span><span class="w"> </span><span class="o">[</span>--model<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="o">[</span>--language<span class="w"> </span>de<span class="o">]</span><span class="w"> </span><span class="o">[</span>--no-llm<span class="o">]</span><span class="w"> </span><span class="o">[</span>--embed-fallback<span class="o">]</span><span class="w"> </span><span class="o">[</span>--embed-model<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="o">[</span>--provider<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>--model<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>--base-url<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="o">[</span>--language<span class="w"> </span>de<span class="o">]</span><span class="w"> </span><span class="o">[</span>--no-llm<span class="o">]</span><span class="w"> </span><span class="o">[</span>--batch<span class="o">]</span><span class="w"> </span><span class="o">[</span>--embed-fallback<span class="o">]</span><span class="w"> </span><span class="o">[</span>--embed-model<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="se">\</span>
 <span class="w">    </span><span class="o">[</span>--config<span class="w"> </span>file.json<span class="p">|</span>file.toml<span class="o">]</span>
 
 <span class="c1"># equivalent:</span>
@@ -575,13 +629,45 @@ python<span class="w"> </span>-m<span class="w"> </span>normpare<span class="w">
 <ul>
 <li><code>--old</code> / <code>--new</code> — the two versions (PDF or DOCX; a mix is fine).</li>
 <li><code>--out</code> — the target directory for <strong>all</strong> output.</li>
-<li><code>--no-llm</code> — produce only the deterministic outputs (no API key needed).</li>
+<li><code>--no-llm</code> — produce only the deterministic outputs (no API key needed). Use a fresh
+  <code>--out</code> directory: an existing <code>deutung.json</code> there would be reused by the reports.</li>
+<li><code>--model</code> — the model at the provider. The default is an Anthropic model, so name it
+  for every other provider.</li>
+<li><code>--language</code> — the language of the AI's free-text output (default <code>de</code>). The
+  deterministic stages read German modal verbs and operators either way.</li>
+<li><code>--provider</code> — one of <code>anthropic</code>, <code>openai</code>, <code>azure_openai</code>, <code>google</code>, <code>mistral</code>, <code>groq</code>,
+  <code>together</code>, <code>openrouter</code>, <code>ollama</code>, <code>openai_compatible</code>, <code>chat</code>. Everything except
+  <code>anthropic</code> speaks the OpenAI-compatible <code>/chat/completions</code> API; <code>chat</code> only exports the
+  prompts for copy-paste. See <a href="../providers/">LLM providers</a>.</li>
+<li><code>--base-url</code> — override the provider's API base URL. Required for <code>azure_openai</code> and
+  <code>openai_compatible</code>, and the way to reach a custom Ollama host.</li>
 <li><code>--batch</code> — send the interpretation as one Anthropic message batch: <strong>~50 % cheaper</strong>,
-  processed asynchronously (see below).</li>
+  processed asynchronously (see below). It has no effect on the other providers.</li>
 <li><code>--embed-fallback</code> — optional embedding rescue pass (see below); off by default.</li>
-<li><code>--config</code> — a JSON/TOML configuration file; it supplies the document metadata, and then
-  <code>--old</code>/<code>--new</code> are optional.</li>
+<li><code>--config</code> — a JSON/TOML configuration file; it supplies the document metadata and the
+  LLM settings (<code>llm_provider</code>, <code>llm_model</code>, <code>llm_base_url</code>, …). With <code>--config</code>, the flags
+  <code>--old</code>, <code>--new</code>, <code>--provider</code>, <code>--model</code> and <code>--language</code> are ignored; <code>--base-url</code>,
+  <code>--batch</code>, <code>--embed-fallback</code> and <code>--embed-model</code> still apply.</li>
 </ul>
+<h2 id="reading-the-run">Reading the run</h2>
+<p>The run prints what it produced and, after an interpretation, how complete it is:</p>
+<div class="highlight"><pre><span></span><code>    Änderungen: 1103, vorgelegt 1101, gedeutet 1101 (99,8 %)
+      ohne Antwort: 0
+    Kapitel in Teilanfragen: 5 (6 Zusatzanfragen)
+    Tabellen gekürzt: 0 von 11
+    Asset-Blöcke gekürzt: 0 von 46
+</code></pre></div>
+<p><code>ohne Antwort</code> above zero means changes were shown to the model and came back without an
+interpretation — because the model skipped them, or because a request failed (the
+chapter is then named with the lost number of changes, e.g. <code>Literatur&lt;Literatur (38)</code>).
+The same numbers are in <code>deutung.json</code> under <code>coverage</code>; the component view carries the
+warning inline, and the CSV gets a companion <code>Aenderungen_&lt;run&gt;_Abdeckung.txt</code> beside it.
+Running the same command into the same directory again re-asks only the requests without
+a usable answer — interrupted, failed at the API, or truncated or unreadable (those two
+are kept in <code>llm_prompts/*.FAILED.txt</code>). An answer that came back but skipped changes is
+cached as it is, and a re-run returns it unchanged.
+<a href="../concept/#coverage-what-was-asked-and-what-came-back">Concept</a> explains the counts,
+<a href="../results/">Working with the results</a> what to read next.</p>
 <h2 id="cost-batching-and-caching">Cost: batching and caching</h2>
 <p>The interpretation stage is the only part that costs money. Two mechanisms keep it cheap:</p>
 <p>Every answer is cached on disk, keyed by model + prompt, so a re-run never pays twice for a
@@ -596,19 +682,27 @@ interpretation is only trustworthy if its quoted evidence actually appears in th
 and that is exactly what small models fail at (the <code>evidence_ok</code> flag in <code>deutung.json</code> and
 the review queue make this measurable).</p>
 <h2 id="alignment-deterministic-default-and-optional-embedding-cascade">Alignment: deterministic default and optional embedding cascade</h2>
-<p>The paragraph alignment is deterministic by default: a TF-IDF backend (word + character
-n-grams) plus numeric/heading anchors resolves the bulk of the pairs, and the result is
-byte-reproducible across runs.</p>
+<p>The paragraph alignment is deterministic by default: an anchor pass pairs paragraphs whose
+text is identical once cosmetic differences are normalized away, a TF-IDF backend (word +
+character n-grams) resolves the rest, and the result is byte-reproducible across runs. The
+chapters above them are anchored on id and title first, then on similarity.</p>
 <p>An <strong>optional embedding rescue pass</strong> (ADR-0001) can be switched on with <code>--embed-fallback</code>.
-It runs <em>after</em> the deterministic pass, <strong>within each chapter</strong>, and only ever refines it:
-paragraphs still left as <code>removed</code> / <code>new</code> in the same chapter are re-paired with a German
-embedding model, so a paragraph that was reworded in place so heavily that TF-IDF missed it
-becomes a single <em>changed</em> entry instead of a separate removal + addition. Cross-chapter
-moves are deliberately left to the deterministic <code>moved</code> pass — a global embedding assignment
-forces spurious pairings. The threshold is <code>tau_embed</code> (default <code>0.82</code>, tuned for precision:
-on a real-world standard revision it recovered about a dozen genuine in-place rewordings). Encoded vectors are
-cached (<code>.vec_cache.npz</code>, keyed by model + normalized text), so the pass is reproducible and
-cheap on re-runs. It needs the <code>embeddings</code> extra:</p>
+It runs <em>after</em> the deterministic pass and only ever refines it: paragraphs still left as
+<code>removed</code> / <code>new</code> <strong>in the same chapter</strong> are re-paired with a German embedding model, so a
+paragraph that was reworded in place so heavily that TF-IDF missed it becomes a single
+<em>changed</em> entry instead of a separate removal + addition. The threshold is <code>tau_embed</code>
+(default <code>0.82</code>, tuned for precision:
+on a real-world standard revision it recovered about a dozen genuine in-place rewordings).
+Encoded vectors are cached (<code>.vec_cache.npz</code>, keyed by model + normalized text), so the pass
+is reproducible and cheap on re-runs.</p>
+<p>The same flag also enables a <strong>cross-chapter</strong> rescue for passages the deterministic move
+pass could not place. It is deliberately harder to satisfy, because at high similarity any
+two technical paragraphs start to look alike: a pair is only accepted as a move when the
+similarity reaches <code>tau_cross</code> (<code>0.90</code>), <strong>every</strong> parameter value of the old side appears
+unchanged on the new side, and the pair is each other's best match. Below <code>tau_cross</code> a pair
+is dropped outright; a pair that clears the threshold but fails one of the other two stays
+<code>removed</code> + <code>new</code> and is noted as a candidate, so the rescue can never invent a move. It
+needs the <code>embeddings</code> extra:</p>
 <div class="highlight"><pre><span></span><code>poetry<span class="w"> </span>install<span class="w"> </span>--with<span class="w"> </span>dev<span class="w"> </span>--extras<span class="w"> </span>embeddings
 
 <span class="c1"># compare the two alignments to judge the difference:</span>
@@ -626,19 +720,24 @@ normpare<span class="w"> </span>compare<span class="w"> </span>--old<span class=
     <span class="n">old</span><span class="o">=</span><span class="s2">&quot;standard_2019.pdf&quot;</span><span class="p">,</span>   <span class="c1"># PDF or DOCX</span>
     <span class="n">new</span><span class="o">=</span><span class="s2">&quot;standard_2026.docx&quot;</span><span class="p">,</span>  <span class="c1"># PDF or DOCX</span>
     <span class="n">out_dir</span><span class="o">=</span><span class="s2">&quot;result/&quot;</span><span class="p">,</span>
-    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;anthropic&quot;</span><span class="p">,</span>      <span class="c1"># or &quot;openai&quot; | &quot;ollama&quot; | &quot;chat&quot;</span>
-    <span class="n">language</span><span class="o">=</span><span class="s2">&quot;de&quot;</span><span class="p">,</span>             <span class="c1"># language of the compared standard (configurable)</span>
+    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;anthropic&quot;</span><span class="p">,</span>      <span class="c1"># or &quot;openai&quot;, &quot;ollama&quot;, &quot;chat&quot;, ... (see note below)</span>
+    <span class="n">language</span><span class="o">=</span><span class="s2">&quot;de&quot;</span><span class="p">,</span>             <span class="c1"># language of the AI&#39;s free-text output</span>
     <span class="n">use_llm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>              <span class="c1"># False -&gt; deterministic outputs only</span>
     <span class="n">embed_fallback</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>      <span class="c1"># True -&gt; optional embedding rescue pass (needs &#39;embeddings&#39; extra)</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">html</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">synopse_det</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">synopse_final</span><span class="p">)</span>
 </code></pre></div>
-<p>For fine control, use the pipeline directly:</p>
+<p>With <code>use_llm=False</code>, <code>result.synopse_final</code> names a file that is not written.</p>
+<p><code>compare()</code> has no <code>base_url</code> argument, so <code>openai_compatible</code> and <code>azure_openai</code> cannot
+be reached through it — without a base URL the run falls back to exporting the prompts.
+For those, and for fine control in general, use the pipeline directly:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">normpare.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">normpare.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
 
-<span class="n">cfg</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">for_compare</span><span class="p">(</span><span class="s2">&quot;standard_2019.pdf&quot;</span><span class="p">,</span> <span class="s2">&quot;standard_2026.docx&quot;</span><span class="p">,</span> <span class="s2">&quot;result/&quot;</span><span class="p">)</span>
-<span class="n">Pipeline</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">use_llm</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">cfg</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">for_compare</span><span class="p">(</span><span class="s2">&quot;standard_2019.pdf&quot;</span><span class="p">,</span> <span class="s2">&quot;standard_2026.docx&quot;</span><span class="p">,</span> <span class="s2">&quot;result/&quot;</span><span class="p">,</span>
+                         <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai_compatible&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;deepseek-v4-flash&quot;</span><span class="p">)</span>
+<span class="n">cfg</span><span class="o">.</span><span class="n">llm</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="s2">&quot;https://api.deepseek.com&quot;</span>
+<span class="n">Pipeline</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">use_llm</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
 <p>See <a href="../providers/">LLM providers</a> for the AI interpretation and the chat workflow.</p>
 

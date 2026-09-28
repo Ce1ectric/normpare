@@ -14,7 +14,7 @@
       
       
       
-        <link rel="next" href="concept/">
+        <link rel="next" href="usage/">
       
       
         
@@ -295,6 +295,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#start-here" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -320,14 +331,14 @@
   
   
     <li class="md-nav__item">
-      <a href="concept/" class="md-nav__link">
+      <a href="usage/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Concept
+    Usage
   
 
     
@@ -347,14 +358,41 @@
   
   
     <li class="md-nav__item">
-      <a href="usage/" class="md-nav__link">
+      <a href="results/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Usage
+    Working with the results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concept
   
 
     
@@ -459,6 +497,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#start-here" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -498,21 +547,39 @@ chapter and paragraph by paragraph, and reports every change — new requirement
 ones, changed limit values, reworded passages, moved sections, edited tables.</p>
 <p>The comparison is <strong>deterministic</strong>: same inputs, same output, every time, no AI involved.
 On top of that you can switch on an optional <strong>AI interpretation</strong> that explains each change
-in plain language and separates substantive changes from mere editorial rewording. Every AI
-statement carries a verbatim quote from the source, and normpare verifies that the quote
-really exists — so every claim is traceable back to the text.</p>
+in plain language and separates substantive changes from mere editorial rewording. Every
+interpretation of a change, a table or a figure carries a verbatim quote from the source,
+and normpare verifies that the quote really exists — so each of them is traceable back to
+the text. What the AI says about the values in a table is checked against the table's
+cells as well.</p>
 <h2 id="what-you-get">What you get</h2>
 <ul>
 <li>an annotated <strong>HTML</strong> version of the new edition: changes colour-coded in place, a summary
-  per chapter, cell-level table diffs, embedded figures;</li>
-<li>two <strong>Word synopses</strong> — a deterministic tabular one, and (with AI) a readable one that
-  bundles related changes into a single entry per topic;</li>
+  per chapter, cell-level table diffs and, for DOCX sources, embedded figures;</li>
+<li>two <strong>Word synopses</strong> — a deterministic tabular one, and (with AI) a readable one with one
+  entry per chapter: an overview, then every interpreted change;</li>
 <li>a <strong>PowerPoint</strong> draft of the key changes, machine-readable <strong>JSON</strong> per stage, <strong>tables as
-  CSV</strong>, figures as image assets.</li>
+  CSV</strong>, and figures as image files when the source is a DOCX;</li>
+<li>the <strong>changed values</strong> with the section they stand in, changed numbers kept apart from
+  changes of the operator only (<code>15 MVA → mindestens 15 MVA</code>);</li>
+<li>working lists to check the result against: every interpreted change as a <strong>CSV row</strong> with
+  its four interpretation axes and its section in both editions, the same material
+  <strong>grouped by affected component</strong>, a <strong>review queue</strong> of interpretations that failed a
+  check, and a <strong>review list</strong> of passages reported as removed whose text is still in the
+  new edition.</li>
 </ul>
+<h2 id="status">Status</h2>
+<p>Version 0.2.0 has been run end to end over three complete standard revisions with 1,100 to
+2,400 changes each: every change sent to the model was answered, 98 – 99 % of the quotes
+were verified in the source. A manual spot check of fifteen central changes, made on the
+runs just before the release, found every value change of the deterministic diff right;
+the errors were an AI statement about a table and a false alarm of the modality
+detection. <a href="results/">Working with the results</a> says what to check by hand.</p>
 <h2 id="start-here">Start here</h2>
 <ul>
 <li><a href="usage/">Usage</a> — install it and run your first comparison</li>
+<li><a href="results/">Working with the results</a> — what to read first, where a change stands, what
+  to check by hand</li>
 <li><a href="concept/">Concept</a> — how the pipeline works, stage by stage</li>
 <li><a href="providers/">LLM providers</a> — choosing and configuring an AI backend</li>
 <li><a href="reference/">API reference</a></li>

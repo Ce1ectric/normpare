@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://ce1ectric.github.io/normpare/providers/">
       
       
-        <link rel="prev" href="../usage/">
+        <link rel="prev" href="../concept/">
       
       
         <link rel="next" href="../reference/">
@@ -253,14 +253,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../concept/" class="md-nav__link">
+      <a href="../usage/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Concept
+    Usage
   
 
     
@@ -280,14 +280,41 @@
   
   
     <li class="md-nav__item">
-      <a href="../usage/" class="md-nav__link">
+      <a href="../results/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Usage
+    Working with the results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concept
   
 
     
@@ -393,6 +420,17 @@
     <span class="md-ellipsis">
       
         OpenAI
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deepseek" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeepSeek
       
     </span>
   </a>
@@ -516,6 +554,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#deepseek" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeepSeek
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#ollama-local-free" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -576,8 +625,8 @@ deterministically and exports the prompts for the chat workflow.</p>
 <td><code>ANTHROPIC_API_KEY</code> or a <code>.api_key</code> file</td>
 </tr>
 <tr>
-<td><code>openai</code> and OpenAI-compatible (<code>azure</code>, <code>google</code>, <code>mistral</code>, <code>groq</code>, <code>openrouter</code>, …)</td>
-<td>via the standard library, no extra package</td>
+<td><code>openai</code> and OpenAI-compatible (<code>azure_openai</code>, <code>google</code>, <code>mistral</code>, <code>groq</code>, <code>together</code>, <code>openrouter</code>, <code>openai_compatible</code> for DeepSeek and others)</td>
+<td>via the standard library, no extra package; <code>--model</code> required</td>
 <td>the provider's API key env var</td>
 </tr>
 <tr>
@@ -596,6 +645,15 @@ deterministically and exports the prompts for the chat workflow.</p>
 <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-...<span class="w">        </span><span class="c1"># or the provider&#39;s variable</span>
 <span class="c1"># or put the key in a file &quot;.api_key&quot; in the working directory</span>
 </code></pre></div>
+<p>The key is looked up in this order: the variable named by <code>llm_key_env</code> in a config
+file; the provider's own variable (<code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>,
+<code>AZURE_OPENAI_API_KEY</code>, <code>GOOGLE_API_KEY</code>, <code>MISTRAL_API_KEY</code>, <code>GROQ_API_KEY</code>,
+<code>TOGETHER_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>OLLAMA_API_KEY</code>; <code>openai_compatible</code> has none);
+the generic <code>LLM_API_KEY</code>; a file <code>.api_key</code> in the directory the command is started from;
+and, for compatibility with the predecessor project, <code>../Pipeline/.api_key</code>. The file works
+for every provider. Never commit it.</p>
+<p>The default model is an Anthropic model for every provider, so name the model with
+<code>--model</code> whenever the provider is not <code>anthropic</code>.</p>
 <h2 id="deterministic-chat-workflow">Deterministic / chat workflow</h2>
 <div class="highlight"><pre><span></span><code><span class="c1"># deterministic only (no AI):</span>
 normpare<span class="w"> </span>compare<span class="w"> </span>--old<span class="w"> </span>OLD<span class="w"> </span>--new<span class="w"> </span>NEW<span class="w"> </span>--out<span class="w"> </span>OUT<span class="w"> </span>--no-llm
@@ -615,6 +673,22 @@ normpare<span class="w"> </span>compare<span class="w"> </span>--old<span class=
 or <code>--provider openai_compatible --base-url https://your-endpoint/v1</code> for anything else.
 Azure needs <code>--provider azure_openai --base-url &lt;deployment-url&gt;</code> (the API version comes from
 <code>llm_api_version</code> in the config).</p>
+<h2 id="deepseek">DeepSeek</h2>
+<p>DeepSeek speaks the OpenAI format, so it needs no provider of its own:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">LLM_API_KEY</span><span class="o">=</span>sk-...
+normpare<span class="w"> </span>compare<span class="w"> </span>--old<span class="w"> </span>OLD<span class="w"> </span>--new<span class="w"> </span>NEW<span class="w"> </span>--out<span class="w"> </span>OUT<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--provider<span class="w"> </span>openai_compatible<span class="w"> </span>--base-url<span class="w"> </span>https://api.deepseek.com<span class="w"> </span>--model<span class="w"> </span>deepseek-v4-flash
+</code></pre></div>
+<p><code>deepseek-v4-flash</code> <strong>thinks by default</strong> (reasoning effort <code>high</code>). normpare therefore
+sends <code>"thinking": {"type": "disabled"}</code> with every OpenAI-compatible request: reasoning
+tokens are billed as output, and while thinking is on the provider ignores <code>temperature</code>,
+which the pipeline sets to 0 for reproducibility. Extracting structured JSON from a
+prepared diff is not a task that needs a chain of thought.</p>
+<p>Should an answer come back with a <code>reasoning_content</code> field anyway, the interpretation
+stage counts it and says so in its summary (<code>Denkmodus: n Antwort(en) …</code>, and <code>field:
+"reasoning"</code> in <code>pipeline_feedback</code>) — thinking that costs money should not be invisible.</p>
+<p><code>--batch</code> has no effect here: the message-batch API is Anthropic's, and every other
+provider falls back to sequential calls.</p>
 <h2 id="ollama-local-free">Ollama (local, free)</h2>
 <p>Run a model locally and point normpare at it — no key, no API cost:</p>
 <div class="highlight"><pre><span></span><code>ollama<span class="w"> </span>serve
@@ -626,13 +700,20 @@ normpare<span class="w"> </span>compare<span class="w"> </span>--old<span class=
 <p>The interpretation is only worth as much as its evidence. Every entry carries a quote that is
 checked against the standard, and <code>deutung.json</code> reports <code>evidence_ok</code> per entry — so the
 quality of a model is directly measurable:</p>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import json;d=json.load(open(&#39;OUT/deutung.json&#39;));x=[e for c in d[&#39;chapters&#39;] for e in (c.get(&#39;interpretations&#39;) or [])];print(f\&quot;evidence_ok: {100*sum(bool(e.get(&#39;evidence_ok&#39;)) for e in x)/len(x):.0f}%\&quot;)&quot;</span>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import json;d=json.load(open(&#39;OUT/deutung.json&#39;));x=[e for c in d[&#39;chapters&#39;] for e in (c.get(&#39;interpretations&#39;) or [])];print(f\&quot;evidence_ok: {100*sum(bool(e.get(&#39;evidence_ok&#39;)) for e in x)/max(len(x),1):.0f}%\&quot;)&quot;</span>
 </code></pre></div>
-<p>In practice this separates models sharply. On a real standard revision, a frontier model
-reached <strong>99 %</strong> verified evidence, while a small, cheap model reached only <strong>21 %</strong> —
-it paraphrased instead of quoting, was <em>more</em> confident while being less grounded, and
-misread editorial rewording as substantive change. For regulatory work, prefer a strong model
-and cut cost with <code>--batch</code> (~50 % cheaper) and the answer cache instead of with a weaker model.</p>
+<p>In practice this separates models. On a real standard revision, a frontier model reached
+<strong>99 %</strong> verified evidence. A small, cheap model scored <strong>21 %</strong> under the guard of 0.1.x,
+which checked the answer exactly as delivered — mostly because it put labels in front of
+otherwise correct quotes; with today's quote extraction the same answers pass at about
+<strong>80 %</strong>. It was also <em>more</em> confident while being less grounded, and misread editorial
+rewording as substantive change. For regulatory work, prefer a strong model and cut cost
+with <code>--batch</code> (~50 % cheaper) and the answer cache instead of with a weaker model.</p>
+<p><code>deepseek-v4-flash</code> is the exception worth knowing: over three complete standard
+revisions (1,100 to 2,400 changes each) it reached <strong>98.3 – 99.3 %</strong> <code>evidence_ok</code> and
+<strong>97.6 – 98.3 %</strong> <code>evidence_strict</code>, and every change sent to it was answered. The script
+<code>tools/evidence_report.py</code> in the repository recomputes these numbers for any finished
+run.</p>
 <p>Note that <code>--batch</code> currently uses the Anthropic message-batch API; other providers fall back
 to sequential calls.</p>
 
