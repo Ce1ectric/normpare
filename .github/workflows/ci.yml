@@ -10,6 +10,11 @@ jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # snok/install-poetry puts poetry on the PATH of bash only; the Windows default shell
+    # (PowerShell) does not find it. bash exists on all three runners.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
