@@ -359,7 +359,8 @@ def test_the_report_stage_is_unaffected(tmp_path):
     change = entries[0]["changes"][0]
     assert change["label"] == "restricted"              # ... and change nothing there
     assert change["binding"] == "tightened"
-    assert set(change) == {"label", "binding", "text", "impact", "marker"}   # AP-17
+    # AP-17 added "marker", AP-41 "location" -- still one field more, none altered, none gone
+    assert set(change) == {"label", "binding", "text", "impact", "marker", "location"}
     assert change["marker"] == "[narrowed · tightened · deadline, proof_obligation]"
 
 

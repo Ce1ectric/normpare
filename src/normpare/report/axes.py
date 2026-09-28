@@ -57,7 +57,7 @@ def axis_marker(interpretation: dict) -> str:
     return f"[{' · '.join(parts)}]" if parts else ""
 
 
-def _chapter_index(synopse: dict | None) -> tuple[dict, dict]:
+def chapter_index(synopse: dict | None) -> tuple[dict, dict]:
     """The synopse chapters by mapping id (ENT-24) and, as the fallback, by section id."""
     by_mapping: dict = {}
     by_section: dict = {}
@@ -90,7 +90,7 @@ def change_rows(synopse: dict | None, deutung: dict | None) -> list[dict]:
     reproducible without sorting, and sorting by section id would only look ordered
     (``"10"`` before ``"2"``).
     """
-    by_mapping, by_section = _chapter_index(synopse)
+    by_mapping, by_section = chapter_index(synopse)
     rows: list[dict] = []
     for chapter in (deutung or {}).get("chapters", []) or []:
         section_id = chapter.get("section_id")
@@ -99,15 +99,15 @@ def change_rows(synopse: dict | None, deutung: dict | None) -> list[dict]:
         changes = source.get("changes") or []
         for interpretation in chapter.get("interpretations") or []:
             index = interpretation.get("change_index")
-            kind = ""
+            change = {}
             if isinstance(index, int) and 0 <= index < len(changes):
-                kind = _text(changes[index].get("kind"))
+                change = changes[index]
             rows.append({
                 "section_id": _text(section_id),
                 "mapping_id": _text(chapter.get("mapping_id") or source.get("mapping_id")),
                 "chapter_title": _text(source.get("title")),
                 "change_index": _text(index),
-                "change_kind": kind,
+                "change_kind": _text(change.get("kind")),
                 "structural_operation": _text(interpretation.get("structural_operation")),
                 "semantic_status": _text(interpretation.get("semantic_status")),
                 "normative_direction": _text(interpretation.get("normative_direction")),
@@ -120,5 +120,10 @@ def change_rows(synopse: dict | None, deutung: dict | None) -> list[dict]:
                 "evidence": _text(interpretation.get("evidence")),
                 "evidence_ok": _text(interpretation.get("evidence_ok")),
                 "confidence": _text(interpretation.get("confidence")),
+                # AP-41, last in the row: where the change really stands. Appended rather
+                # than sorted in, so an evaluation that reads the CSV by column position
+                # keeps working.
+                "section_old": _text(change.get("section_old")),
+                "section_new": _text(change.get("section_new")),
             })
     return rows

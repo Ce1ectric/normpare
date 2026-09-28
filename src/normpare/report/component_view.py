@@ -24,6 +24,7 @@ from ..stages.deutung import (
     format_percent,
 )
 from .axes import carries_axes, change_rows
+from .location import change_location
 
 #: How many characters of the evidence the view shows -- enough to recognise the span,
 #: short enough to keep a section of cases readable (the convention of
@@ -145,6 +146,10 @@ def _entry(row: dict) -> list[str]:
     """One change: where it stands, what it does, and the sentence it is read from."""
     title = row["chapter_title"]
     head = f"Kapitel {row['section_id']}" + (f" — {title}" if title else "")
+    # AP-41: the chapter is the head of the mapping; the paragraph often sits deeper
+    location = change_location(row, row["section_id"])
+    if location:
+        head += f" · Abschnitt {location}"
     mark = " · ".join(v for v in (row["normative_direction"], row["semantic_status"]) if v)
     lines = [f"- **{head}**" + (f" · `{mark}`" if mark else ""),
              f"  {row['change']}" if row["change"] else "  _(ohne Beschreibung)_"]

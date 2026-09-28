@@ -373,8 +373,11 @@ def test_kennwert_changes_are_unchanged(tmp_path):
         "added": [], "removed": [], "n_old": 1, "n_new": 1}
     old_doc, new_doc = _docs()
     res = build_statistics(old_doc, new_doc, syn, tmp_path / "statistics.json")
+    # AP-41 adds "section" and "value_class"; both are None here because the fixture
+    # change record carries neither -- the four older fields are untouched
     assert res["comparison"]["kennwert_changes"] == [
-        {"chapter": "1", "mapping_id": "1<1", "old": "500 kW", "new": "400 kW"}]
+        {"chapter": "1", "mapping_id": "1<1", "section": None,
+         "old": "500 kW", "new": "400 kW", "value_class": None}]
 
 
 # -- AP-33: a value in the neighbouring table is not a value nowhere ---------------------

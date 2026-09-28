@@ -11,6 +11,14 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.util import Inches, Pt
 
+from ..stages.enrich.values import split_value_classes
+from .location import change_location, section_location
+from .synopse_det import OPERATOR_GROUP_LABEL
+
+#: How many value changes the slide lists before it counts the rest -- per group, so a
+#: long list of spellings cannot push the changed numbers off the slide.
+KENNWERT_SLIDE_MAX = 14
+
 DARK = RGBColor(0x1F, 0x3A, 0x5F)
 RED = RGBColor(0xB9, 0x1C, 0x1C)
 GREEN = RGBColor(0x15, 0x80, 0x3D)
@@ -60,6 +68,26 @@ def _bullet_slide(prs, title, bullets, title_color=DARK):
     return s
 
 
+def kennwert_groups(rows: list[dict]) -> tuple[list[dict], list[dict]]:
+    """The two groups of the parameter-value slide: changed numbers, then spellings.
+
+    Christian read all seventeen value changes of 4110 and 4120: nine of them change a
+    number, eight add, drop or swap an operator. Both stay on the slide -- "± 5 % -> 5 %"
+    is a removed operator and still a real narrowing -- but they no longer stand in one
+    undifferentiated list, and the headline counts the numbers (AP-41).
+    """
+    return split_value_classes(rows)
+
+
+def _kennwert_line(row: dict) -> str:
+    """``chapter (section):  old  →  new`` -- the section only where it differs."""
+    where = row.get("chapter") or ""
+    section = section_location(row.get("section"), where)
+    if section:
+        where += f" ({section})"
+    return f"{where}:  {row['old']}  →  {row['new']}"
+
+
 def _chapter_priority(ch, deut) -> float:
     p = 0.0
     rel = (deut or {}).get("training_relevance")
@@ -102,11 +130,14 @@ def build_pptx(synopse: dict, deutung: dict | None, statistics: dict,
     # overview
     comp = statistics["comparison"]
     ck = comp["change_kinds"]
+    kw_numbers, kw_operators = kennwert_groups(comp["kennwert_changes"])
     _bullet_slide(prs, "Überblick: Was hat sich geändert?", [
         (f"{ck.get('similar', 0)} geänderte Absätze in {comp['n_chapters_with_changes']} Kapiteln", 0, None, True),
         (f"{ck.get('new', 0)} neue Absätze — {ck.get('removed', 0)} entfallene Absätze", 0, None, False),
         (f"{ck.get('moved_in', 0)} verschobene Inhalte (Umstrukturierung)", 0, None, False),
-        (f"{len(comp['kennwert_changes'])} Kennwert-/Grenzwert-Änderungen", 0, ORANGE, True),
+        (f"{len(kw_numbers)} Kennwert-/Grenzwert-Änderungen", 0, ORANGE, True),
+        ((f"dazu {len(kw_operators)} Einträge, bei denen sich nur der Operator ändert "
+          "(ergänzt, entfernt oder gewechselt)"), 1, GREY, False),
         (f"Verbindlichkeit: {comp['modality_shifts'].get('verschaerft', 0)} verschärft, "
          f"{comp['modality_shifts'].get('gelockert', 0)} gelockert", 0, RED, False),
         ("Dokumentumfang: "
@@ -115,13 +146,22 @@ def build_pptx(synopse: dict, deutung: dict | None, statistics: dict,
          f"{statistics['old']['formulas']} → {statistics['new']['formulas']} Formeln", 0, GREY, False),
     ])
 
-    # parameter values
-    kws = comp["kennwert_changes"][:14]
-    if kws:
-        _bullet_slide(prs, "Geänderte Kennwerte und Grenzwerte",
-                      [(f"{k['chapter']}:  {k['old']}  →  {k['new']}", 0, ORANGE, False) for k in kws]
-                      + ([(f"… und {len(comp['kennwert_changes']) - 14} weitere (siehe Synopse)",
-                           0, GREY, False)] if len(comp["kennwert_changes"]) > 14 else []))
+    # parameter values: the changed numbers first, the operator spellings under their own
+    # heading below -- nothing is left out, the reader is only told where to look first
+    if kw_numbers or kw_operators:
+        bullets = [(_kennwert_line(k), 0, ORANGE, False)
+                   for k in kw_numbers[:KENNWERT_SLIDE_MAX]]
+        if len(kw_numbers) > KENNWERT_SLIDE_MAX:
+            bullets.append(((f"… und {len(kw_numbers) - KENNWERT_SLIDE_MAX} weitere "
+                             "(siehe Synopse)"), 0, GREY, False))
+        if kw_operators:
+            bullets.append((OPERATOR_GROUP_LABEL, 0, GREY, True))
+            bullets += [(_kennwert_line(k), 1, GREY, False)
+                        for k in kw_operators[:KENNWERT_SLIDE_MAX]]
+            if len(kw_operators) > KENNWERT_SLIDE_MAX:
+                bullets.append(((f"… und {len(kw_operators) - KENNWERT_SLIDE_MAX} weitere "
+                                 "(siehe Synopse)"), 1, GREY, False))
+        _bullet_slide(prs, "Geänderte Kennwerte und Grenzwerte", bullets)
 
     # top chapters
     ranked = sorted((ch for ch in synopse["chapters"]
@@ -143,15 +183,23 @@ def build_pptx(synopse: dict, deutung: dict | None, statistics: dict,
                     if x.get("change_index") == ci:
                         dd = x
                         break
+            # AP-41: the slide is headed with the chapter, the paragraph often sits deeper
+            loc = change_location(c, cid)
+            where = f" [{loc}]" if loc else ""
             if dd and dd.get("change"):
                 col = RED if dd.get("obligation") == "tightened" else None
-                bullets.append(("• " + dd["change"], 1, col, False))
+                bullets.append((f"•{where} " + dd["change"], 1, col, False))
                 if dd.get("impact"):
                     bullets.append(("→ " + dd["impact"], 2, GREY, False))
                 n_shown += 1
             elif c.get("kennwerte", {}).get("changed"):
-                for k in c["kennwerte"]["changed"]:
-                    bullets.append((f"• Kennwert: {k['old']['raw']} → {k['new']['raw']}", 1, ORANGE, True))
+                numbers, operators = kennwert_groups(c["kennwerte"]["changed"])
+                for k in numbers:
+                    bullets.append(((f"• Kennwert{where}: {k['old']['raw']} → "
+                                     f"{k['new']['raw']}"), 1, ORANGE, True))
+                for k in operators:
+                    bullets.append(((f"• Schreibweise{where}: {k['old']['raw']} → "
+                                     f"{k['new']['raw']}"), 1, GREY, False))
                 n_shown += 1
             elif c["kind"] == "new" and (c.get("modality") or {}).get("new") in ("muss", "darf_nicht"):
                 bullets.append(("• NEU (Pflicht): " + (c.get("new_text") or "")[:160], 1, GREEN, False))

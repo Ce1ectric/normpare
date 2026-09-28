@@ -11,6 +11,13 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor, Cm
 
+from ..stages.enrich.values import split_value_classes
+from .location import change_location
+
+#: What the three operator classes are called where they stand together (AP-41). One
+#: wording for the Word synopsis and the slide, so the two documents read the same.
+OPERATOR_GROUP_LABEL = "nur Schreibweise (Operator ergänzt/entfernt/gewechselt):"
+
 RED = RGBColor(0xB9, 0x1C, 0x1C)
 GREEN = RGBColor(0x15, 0x80, 0x3D)
 BLUE = RGBColor(0x1E, 0x40, 0xAF)
@@ -137,10 +144,30 @@ def build_docx_synopse(synopse: dict, deutung: dict | None, out_path: str | Path
                 _shade(row[1], "F0FDF4")
             elif c["kind"] == "removed":
                 _shade(row[0], "FEF2F2")
-            for k in (c.get("kennwerte") or {}).get("changed", []):
+            # AP-41: the block title names the chapter mapping, this line names the
+            # section the paragraph really sits in -- and both sides of it when the
+            # paragraph changed section between the editions.
+            loc = change_location(c, cid)
+            if loc:
+                r = info.add_run(f"Abschnitt {loc}\n")
+                r.font.color.rgb = GREY
+                r.font.size = Pt(8)
+            # a changed number first, the operator spellings below it under their own
+            # heading -- nothing is left out, an added operator is just rarely the point
+            numbers, operators = split_value_classes(
+                (c.get("kennwerte") or {}).get("changed", []))
+            for k in numbers:
                 r = info.add_run(f"{k['old']['raw']} → {k['new']['raw']}\n")
                 r.font.color.rgb = ORANGE
                 r.bold = True
+            if operators:
+                r = info.add_run(OPERATOR_GROUP_LABEL + "\n")
+                r.font.color.rgb = GREY
+                r.font.size = Pt(8)
+                for k in operators:
+                    r = info.add_run(f"{k['old']['raw']} → {k['new']['raw']}\n")
+                    r.font.color.rgb = GREY
+                    r.font.size = Pt(8)
             mod = c.get("modality") or {}
             if mod.get("shift") in ("verschaerft", "gelockert"):
                 r = info.add_run(f"Verbindlichkeit {mod['shift']} ({mod.get('old')}→{mod.get('new')})\n")

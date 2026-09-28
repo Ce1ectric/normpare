@@ -26,11 +26,15 @@ from .axes import change_rows
 
 #: The columns, in this order. Axis D is one column (see :data:`COMPONENT_SEPARATOR`),
 #: the two older labels stay in -- AP-17 shows the axes, it does not replace anything.
+#: ``section_old``/``section_new`` (AP-41) are appended at the **end**: ``section_id`` is
+#: the head of the chapter mapping and keeps column 1, and an evaluation that reads this
+#: file by column position does not shift.
 CSV_COLUMNS = (
     "section_id", "mapping_id", "chapter_title", "change_index", "change_kind",
     "structural_operation", "semantic_status", "normative_direction",
     "affected_components", "indeterminate_reason", "semantic_label", "obligation",
     "change", "impact", "evidence", "evidence_ok", "confidence",
+    "section_old", "section_new",
 )
 
 #: German Excel opens a comma-separated file into a single column.

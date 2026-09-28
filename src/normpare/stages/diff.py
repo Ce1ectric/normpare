@@ -548,11 +548,40 @@ def tables_diff(old_sec_list, new_sec_list, sim_backend) -> list[dict]:
     return out
 
 
+def paragraph_sections(doc: dict) -> dict[str, str]:
+    """``{paragraph id: section id}`` -- the assignment the document itself makes.
+
+    The section of a change is read from here and never from the shape of the paragraph
+    id (AP-41). ``11.2.6.7.p3`` would survive a string rule, ``A.p13`` in an annex and the
+    synthetic title paragraph ``....p0`` would not, and a future id scheme would break it
+    silently: the id is a name, the document is the record.
+    """
+    return {p["id"]: s["id"]
+            for s in doc.get("sections", []) for p in s.get("paragraphs", [])}
+
+
+def _section_of(paras: list[dict], sections: dict[str, str] | None) -> str | None:
+    """The section the **first** paragraph of this side sits in, or ``None``.
+
+    First, not all of them: a change is shown in one place, so it names one. A record whose
+    paragraphs straddle a section boundary (a ``merged`` across one) is named after where
+    it starts, which is where a reader looking it up begins to read.
+    """
+    if not paras or not sections:
+        return None
+    return sections.get(paras[0]["id"])
+
+
 def _para_change(kind: str, olds: list[dict], news: list[dict], conf: float,
-                 extra: dict | None = None) -> dict:
+                 extra: dict | None = None, old_sections: dict | None = None,
+                 new_sections: dict | None = None) -> dict:
     old_t, new_t = _join(olds), _join(news)
     rec = {"kind": kind, "confidence": conf,
            "old_ids": [p["id"] for p in olds], "new_ids": [p["id"] for p in news],
+           # AP-41: the chapter mapping is named after its head, the change is not. At 4110
+           # 41 % of the changes stand in a subsection of the head they were shown under.
+           "section_old": _section_of(olds, old_sections),
+           "section_new": _section_of(news, new_sections),
            "old_text": old_t or None, "new_text": new_t or None}
     term_no = next((p.get("term_no") for p in news + olds if p.get("term_no")), None)
     if term_no:
@@ -645,6 +674,10 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
     n_secs = {s["id"]: s for s in new_doc["sections"]}
     o_par = {p["id"]: p for s in old_doc["sections"] for p in s["paragraphs"]}
     n_par = {p["id"]: p for s in new_doc["sections"] for p in s["paragraphs"]}
+    o_sec_of, n_sec_of = paragraph_sections(old_doc), paragraph_sections(new_doc)
+
+    def _change(kind, olds, news, conf, extra=None):
+        return _para_change(kind, olds, news, conf, extra, o_sec_of, n_sec_of)
 
     chapters = []
     for rec in mapping_records:
@@ -677,10 +710,10 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
                     l = link_of.get(p["id"]) or {}
                     if l.get("kind") == "moved_in":
                         ch["changes"].append(
-                            _para_change("moved_in", [], [p], l.get("confidence", 0.0),
+                            _change("moved_in", [], [p], l.get("confidence", 0.0),
                                          {"moved_from": l.get("moved_from")}))
                         continue
-                    ch["changes"].append(_para_change("new", [], [p], 0.0))
+                    ch["changes"].append(_change("new", [], [p], 0.0))
         elif mt == "removed":
             for p in o_secs.get(rec["old_id"], {"paragraphs": []})["paragraphs"]:
                 if (p.get("n1") or p.get("n0", "")).strip() and p.get("kind") != "formula":
@@ -690,13 +723,13 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
                         if l.get("moved_to_chapter"):
                             extra["moved_to_chapter"] = l["moved_to_chapter"]
                         ch["changes"].append(
-                            _para_change("moved_away", [p], [], l.get("confidence", 0.0),
+                            _change("moved_away", [p], [], l.get("confidence", 0.0),
                                          extra))
                         continue
                     if _is_non_normative([p], ch["title"]):
                         ch["n_non_normative"] = ch.get("n_non_normative", 0) + 1
                         continue
-                    ch["changes"].append(_para_change("removed", [p], [], 0.0))
+                    ch["changes"].append(_change("removed", [p], [], 0.0))
         else:
             for l in rec.get("para_links", []):
                 olds = [o_par[i] for i in l["old_ids"]]
@@ -716,7 +749,7 @@ def build_synopse(old_doc, new_doc, mapping_records, sim_backend, out_path: str 
                 # AP-26: a candidate the check rule did not confirm -- stays a removal
                 if l.get("possible_move_to"):
                     extra["possible_move_to"] = l["possible_move_to"]
-                c = _para_change(l["kind"], olds, news, l.get("confidence", 0.0), extra)
+                c = _change(l["kind"], olds, news, l.get("confidence", 0.0), extra)
                 if c["kind"] == "cosmetic" and c.get("syntactic", {}).get("change_ratio", 0) == 0:
                     ch["n_identical"] += 1
                     continue

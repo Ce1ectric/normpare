@@ -113,7 +113,9 @@ def test_csv_has_all_columns_in_order(tmp_path):
         "section_id", "mapping_id", "chapter_title", "change_index", "change_kind",
         "structural_operation", "semantic_status", "normative_direction",
         "affected_components", "indeterminate_reason", "semantic_label", "obligation",
-        "change", "impact", "evidence", "evidence_ok", "confidence"]
+        "change", "impact", "evidence", "evidence_ok", "confidence",
+        # AP-41, appended at the end so the AP-17 positions do not shift
+        "section_old", "section_new"]
     # one line per interpretation, plus the header
     assert len(_read(out).splitlines()) == 4
 

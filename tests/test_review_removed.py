@@ -325,9 +325,11 @@ def test_the_change_stream_is_untouched(tmp_path):
         ("new", (), ("n.fresh",), None,
          "Der Nachweis der Kurzschlussfestigkeit ist dem Netzbetreiber vorzulegen."),
     ]
-    # the added key is the only difference to a removal record before AP-11
+    # the added keys are the only difference to a removal record before AP-11 (relocation)
+    # and before AP-41 (the two sections)
     assert set(removed[0]) == {"kind", "confidence", "old_ids", "new_ids", "old_text",
-                               "new_text", "modality", "kennwerte", "relocation"}
+                               "new_text", "modality", "kennwerte", "relocation",
+                               "section_old", "section_new"}
 
 
 # --- the artifact -----------------------------------------------------------------

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..text.textnorm import n3
 from .axes import axis_marker
+from .location import change_location
 
 _CSS = """
 body{font-family:'Segoe UI',Arial,sans-serif;margin:0;color:#1a1a1a;line-height:1.5}
@@ -254,10 +255,16 @@ def _collect_kennwert_rows(synopse: dict, deutung: dict | None) -> list[dict]:
     for c in synopse["chapters"]:
         kap = c.get("new_id") or c.get("old_id") or ""
         for r in c.get("changes", []):
+            # AP-41: the body of this file shows every change at its own paragraph and so
+            # carries the location already. This summary table does not -- it is the one
+            # place in the HTML that names a chapter for a single change, and it named the
+            # head of the chapter mapping.
+            loc = change_location(r, kap)
             for e in (r.get("kennwerte") or {}).get("changed", []):
                 bu = (e.get("new") or {}).get("base_unit") or e.get("unit") or ""
                 desc = (r.get("new_text") or r.get("old_text") or "").strip()[:140]
-                rows.append({"k": _UNIT_LABEL.get(bu, bu or "Kennwert"), "kap": kap,
+                rows.append({"k": _UNIT_LABEL.get(bu, bu or "Kennwert"),
+                             "kap": f"{kap} ({loc})" if loc else kap,
                              "desc": desc, "alt": (e.get("old") or {}).get("raw", ""),
                              "neu": (e.get("new") or {}).get("raw", ""), "src": "Absatz"})
     for c in (deutung.get("chapters", []) if deutung else []):

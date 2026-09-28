@@ -197,6 +197,55 @@ def _key(rec: dict) -> tuple:
     return (rec["base_unit"], rec["base_value"], rec.get("base_value2"), rec.get("op"))
 
 
+#: What moved in a value change. A changed number is always worth reading; an added
+#: operator ("15 MVA" -> "mindestens 15 MVA") almost never is. The four are a **label**,
+#: not a verdict: a removed operator can be a real narrowing -- "± 5 %" -> "5 %" allows a
+#: deviation upwards only -- and nothing is dropped because of its class (AP-41).
+VALUE_CHANGED = "value_changed"
+OPERATOR_ADDED = "operator_added"
+OPERATOR_REMOVED = "operator_removed"
+OPERATOR_CHANGED = "operator_changed"
+
+#: The closed vocabulary, in the order the views show it: the number first.
+VALUE_CLASSES = (VALUE_CHANGED, OPERATOR_ADDED, OPERATOR_REMOVED, OPERATOR_CHANGED)
+
+#: The three that move an operator instead of a number.
+OPERATOR_CLASSES = (OPERATOR_ADDED, OPERATOR_REMOVED, OPERATOR_CHANGED)
+
+
+def split_value_classes(entries) -> tuple[list[dict], list[dict]]:
+    """Records carrying ``value_class``, split into changed numbers and operator spellings.
+
+    The order inside each group is the order given. A record **without** the field counts
+    as a changed number: a run written before AP-41 says nothing about its class, and
+    filing it under "only the spelling" would be a claim nobody made.
+    """
+    numbers, operators = [], []
+    for entry in entries or []:
+        target = operators if entry.get("value_class") in OPERATOR_CLASSES else numbers
+        target.append(entry)
+    return numbers, operators
+
+
+def value_class(old: dict, new: dict) -> str:
+    """Which of the four kinds of change this pair of values is.
+
+    Decided on ``(base_value, base_unit, base_value2)`` of both sides -- the normalized
+    quantity, so ``950 kW`` and ``0,95 MW`` are the same number -- and, only if those are
+    equal, on ``op``. A pair whose key is equal in all four parts never reaches here: the
+    value diff cancels it out before it becomes an entry.
+    """
+    quantity = (old.get("base_value"), old.get("base_unit"), old.get("base_value2"))
+    if quantity != (new.get("base_value"), new.get("base_unit"), new.get("base_value2")):
+        return VALUE_CHANGED
+    old_op, new_op = old.get("op"), new.get("op")
+    if not old_op:
+        return OPERATOR_ADDED
+    if not new_op:
+        return OPERATOR_REMOVED
+    return OPERATOR_CHANGED
+
+
 def diff_values(old_text: str, new_text: str) -> dict:
     """Value-level parameter diff. changed = same unit, different value
     (only when exactly one 'free' value of that unit is left on each side)."""
@@ -229,7 +278,8 @@ def diff_values(old_text: str, new_text: str) -> dict:
     for u in sorted(set(by_unit_o) | set(by_unit_n)):  # sorted -> deterministic order (reproducibility)
         o_list, n_list = by_unit_o.get(u, []), by_unit_n.get(u, [])
         if len(o_list) == 1 and len(n_list) == 1:
-            changed.append({"unit": u, "old": o_list[0], "new": n_list[0]})
+            changed.append({"unit": u, "old": o_list[0], "new": n_list[0],
+                            "value_class": value_class(o_list[0], n_list[0])})
         else:
             removed += o_list
             added += n_list

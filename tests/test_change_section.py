@@ -17,13 +17,13 @@ from __future__ import annotations
 import copy
 import csv
 
+from normpare.report.axes import change_rows
 from normpare.report.changes_csv import (
     CSV_COLUMNS,
     DELIMITER,
     ENCODING,
     build_changes_csv,
 )
-from normpare.report.axes import change_rows
 from normpare.report.location import change_location
 from normpare.report.stats import pair_stats
 from normpare.report.synopse_det import build_docx_synopse

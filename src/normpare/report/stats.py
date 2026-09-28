@@ -69,8 +69,14 @@ def pair_stats(synopse: dict, old_doc: dict | None = None,
         for c in ch["changes"]:
             kinds[c["kind"]] += 1
             for k in (c.get("kennwerte") or {}).get("changed", []):
+                # AP-41: ``chapter`` is the head of the chapter mapping and stays what it
+                # was; ``section`` is where the paragraph actually stands, which is where
+                # a reader with the standard in hand has to look. ``value_class`` says
+                # whether a number or only an operator moved -- a label, not a verdict.
                 kennwert_changes.append({"chapter": cid, "mapping_id": mid,
-                                         "old": k["old"]["raw"], "new": k["new"]["raw"]})
+                                         "section": c.get("section_new") or c.get("section_old"),
+                                         "old": k["old"]["raw"], "new": k["new"]["raw"],
+                                         "value_class": k.get("value_class")})
             sh = (c.get("modality") or {}).get("shift")
             if sh and sh != "unveraendert":
                 mod_shifts[sh] += 1

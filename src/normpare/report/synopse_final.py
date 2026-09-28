@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .axes import axis_marker
+from .axes import axis_marker, chapter_index
+from .location import change_location
 
 _RELEVANCE_ORDER = {"high": 0, "medium": 1, "low": 2}
 
@@ -28,26 +29,35 @@ def _build_entries(synopse: dict, deutung: dict) -> list[dict]:
             if key and key not in titles:
                 titles[key] = ch.get("title") or ""
 
+    by_mapping, by_section = chapter_index(synopse)
+
     entries: list[dict] = []
     for ch in (deutung or {}).get("chapters", []):
         overview = (ch.get("change_overview") or "").strip()
         interpretations = ch.get("interpretations") or []
+        sid = ch.get("section_id")
+        source = by_mapping.get(ch.get("mapping_id")) or by_section.get(sid) or {}
+        records = source.get("changes") or []
         changes = []
         for d in interpretations:
             text = (d.get("change") or "").strip()
             if not text:
                 continue
+            index = d.get("change_index")
+            record = records[index] if isinstance(index, int) and 0 <= index < len(records) else {}
             changes.append({
                 "label": (d.get("semantic_label") or "").strip(),
                 "binding": (d.get("obligation") or "").strip(),
                 # AP-17: the three model axes behind the label, empty for a run without them
                 "marker": axis_marker(d),
+                # AP-41: the section the change really stands in, empty where that is the
+                # chapter the entry is already headed with
+                "location": change_location(record, sid),
                 "text": text,
                 "impact": (d.get("impact") or "").strip(),
             })
         if not overview and not changes:
             continue
-        sid = ch.get("section_id")
         entries.append({
             "section_id": sid,
             "title": titles.get(sid, ""),
@@ -133,6 +143,8 @@ def build_final_synopse(synopse: dict, deutung: dict, out_path: str | Path,
                 # rendering yet, and a half-translated marker would read as two vocabularies
                 if c["marker"]:
                     _run(p, f"{c['marker']} ", color=grey)
+                if c["location"]:
+                    _run(p, f"Abschnitt {c['location']}: ", bold=True, color=grey)
                 _run(p, c["text"])
                 if c["impact"]:
                     sub = doc.add_paragraph()
