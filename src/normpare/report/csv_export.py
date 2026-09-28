@@ -34,5 +34,7 @@ def export_tables_csv(doc: dict, out_dir) -> list[str]:
                 writer = csv.writer(fh)
                 for row in cells:
                     writer.writerow(["" if c is None else str(c) for c in row])
-            written.append(str(rel))
+            # POSIX form on every platform: the docstring promises "assets/tables/x.csv",
+            # and str() would give "assets\\tables\\x.csv" on Windows
+            written.append(rel.as_posix())
     return written

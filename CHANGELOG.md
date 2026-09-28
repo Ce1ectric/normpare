@@ -679,6 +679,10 @@ detection.
   unexplained.
 - **A thousands separator written as a space is read.** `1 000 ms` was read as `000 ms`,
   a silent zero instead of a missing value.
+- **The test suite runs on Windows.** CI ran its steps in PowerShell, where Poetry was not
+  on the path, so the Windows job never reached the tests; it now uses bash on every
+  runner. `export_tables_csv` returns `assets/tables/<id>.csv` on every platform instead
+  of a backslash path on Windows.
 
 - **The replay driver replays the run instead of continuing it.** `tools/replay.py`
   recomputes the deterministic stages of a finished run over its frozen `norm_doc.json`

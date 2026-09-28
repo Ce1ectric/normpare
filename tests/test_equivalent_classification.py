@@ -228,11 +228,12 @@ def test_the_classifier_takes_several_runs(tmp_path):
         assert group in comparison
     assert (out / "equivalent_without_counterpart_run_a.txt").exists()
     assert (out / "equivalent_without_counterpart_run_b.txt").exists()
-    # deterministic: the same input written twice gives the same bytes
+    # deterministic: the same input written twice gives the same bytes. Bytes against
+    # bytes -- ``comparison`` was read in text mode, which folds Windows line ends.
     again = tmp_path / "bericht2"
     ewc.main(["--dir", str(a), "--dir", str(b), "--out", str(again)])
     assert (again / "equivalent_without_counterpart_comparison.txt").read_bytes() == \
-        comparison.encode("utf-8")
+        (out / "equivalent_without_counterpart_comparison.txt").read_bytes()
 
 
 def test_the_tool_writes_only_to_out(tmp_path):
