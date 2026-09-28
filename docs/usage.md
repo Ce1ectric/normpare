@@ -2,7 +2,15 @@
 
 ## Installation
 
-Requires **Python 3.13** and [Poetry](https://python-poetry.org/).
+Requires **Python 3.13**.
+
+```bash
+pip install normpare                      # deterministic comparison, OpenAI-compatible AI
+pip install "normpare[anthropic]"         # + AI interpretation via Anthropic
+pip install "normpare[embeddings]"        # + optional embedding rescue pass
+```
+
+From a checkout, with [Poetry](https://python-poetry.org/):
 
 ```bash
 poetry install --with dev          # optional extras: --extras "anthropic embeddings"
@@ -23,7 +31,12 @@ python -m normpare compare --old … --new … --out …
 
 - `--old` / `--new` — the two versions (PDF or DOCX; a mix is fine).
 - `--out` — the target directory for **all** output.
-- `--no-llm` — produce only the deterministic outputs (no API key needed).
+- `--no-llm` — produce only the deterministic outputs (no API key needed). Use a fresh
+  `--out` directory: an existing `deutung.json` there would be reused by the reports.
+- `--model` — the model at the provider. The default is an Anthropic model, so name it
+  for every other provider.
+- `--language` — the language of the AI's free-text output (default `de`). The
+  deterministic stages read German modal verbs and operators either way.
 - `--provider` — one of `anthropic`, `openai`, `azure_openai`, `google`, `mistral`, `groq`,
   `together`, `openrouter`, `ollama`, `openai_compatible`, `chat`. Everything except
   `anthropic` speaks the OpenAI-compatible `/chat/completions` API; `chat` only exports the
@@ -33,26 +46,34 @@ python -m normpare compare --old … --new … --out …
 - `--batch` — send the interpretation as one Anthropic message batch: **~50 % cheaper**,
   processed asynchronously (see below). It has no effect on the other providers.
 - `--embed-fallback` — optional embedding rescue pass (see below); off by default.
-- `--config` — a JSON/TOML configuration file; it supplies the document metadata, and then
-  `--old`/`--new` are optional.
+- `--config` — a JSON/TOML configuration file; it supplies the document metadata and the
+  LLM settings (`llm_provider`, `llm_model`, `llm_base_url`, …). With `--config`, the flags
+  `--old`, `--new`, `--provider`, `--model` and `--language` are ignored; `--base-url`,
+  `--batch`, `--embed-fallback` and `--embed-model` still apply.
 
 ## Reading the run
 
 The run prints what it produced and, after an interpretation, how complete it is:
 
 ```
-    Änderungen: 1899, vorgelegt 1897, gedeutet 1859 (97,9 %)
-      ohne Antwort: 38   Literatur<Literatur (38)
-    Kapitel in Teilanfragen: 7 (26 Zusatzanfragen)
-    Tabellen gekürzt: 0 von 15
-    Asset-Blöcke gekürzt: 0 von 47
+    Änderungen: 1103, vorgelegt 1101, gedeutet 1101 (99,8 %)
+      ohne Antwort: 0
+    Kapitel in Teilanfragen: 5 (6 Zusatzanfragen)
+    Tabellen gekürzt: 0 von 11
+    Asset-Blöcke gekürzt: 0 von 46
 ```
 
-`ohne Antwort` above zero means the model was shown changes it did not answer for; the
-chapters are named so you can ask again for those alone. The same numbers are in
-`deutung.json` under `coverage`; the component view carries the warning inline, and the CSV
-gets a companion `Aenderungen_<run>_Abdeckung.txt` beside it.
-[Concept](concept.md#coverage-what-was-asked-and-what-came-back) explains the three counts.
+`ohne Antwort` above zero means changes were shown to the model and came back without an
+interpretation — because the model skipped them, or because a request failed (the
+chapter is then named with the lost number of changes, e.g. `Literatur<Literatur (38)`).
+The same numbers are in `deutung.json` under `coverage`; the component view carries the
+warning inline, and the CSV gets a companion `Aenderungen_<run>_Abdeckung.txt` beside it.
+Running the same command into the same directory again re-asks only the requests without
+a usable answer — interrupted, failed at the API, or truncated or unreadable (those two
+are kept in `llm_prompts/*.FAILED.txt`). An answer that came back but skipped changes is
+cached as it is, and a re-run returns it unchanged.
+[Concept](concept.md#coverage-what-was-asked-and-what-came-back) explains the counts,
+[Working with the results](results.md) what to read next.
 
 ## Cost: batching and caching
 
@@ -124,22 +145,28 @@ result = normpare.compare(
     old="standard_2019.pdf",   # PDF or DOCX
     new="standard_2026.docx",  # PDF or DOCX
     out_dir="result/",
-    provider="anthropic",      # or "openai" | "ollama" | "chat"
-    language="de",             # language of the compared standard (configurable)
+    provider="anthropic",      # or "openai", "ollama", "chat", ... (see note below)
+    language="de",             # language of the AI's free-text output
     use_llm=True,              # False -> deterministic outputs only
     embed_fallback=False,      # True -> optional embedding rescue pass (needs 'embeddings' extra)
 )
 print(result.html, result.synopse_det, result.synopse_final)
 ```
 
-For fine control, use the pipeline directly:
+With `use_llm=False`, `result.synopse_final` names a file that is not written.
+
+`compare()` has no `base_url` argument, so `openai_compatible` and `azure_openai` cannot
+be reached through it — without a base URL the run falls back to exporting the prompts.
+For those, and for fine control in general, use the pipeline directly:
 
 ```python
 from normpare.config import Config
 from normpare.pipeline import Pipeline
 
-cfg = Config.for_compare("standard_2019.pdf", "standard_2026.docx", "result/")
-Pipeline(cfg).run("all", use_llm=False)
+cfg = Config.for_compare("standard_2019.pdf", "standard_2026.docx", "result/",
+                         provider="openai_compatible", model="deepseek-v4-flash")
+cfg.llm.base_url = "https://api.deepseek.com"
+Pipeline(cfg).run("all", use_llm=True)
 ```
 
 See [LLM providers](providers.md) for the AI interpretation and the chat workflow.

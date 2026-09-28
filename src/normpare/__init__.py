@@ -35,9 +35,13 @@ def compare(
         old: Path to the old version of the standard (PDF or DOCX).
         new: Path to the new version of the standard (PDF or DOCX).
         out_dir: Target directory for all output.
-        provider: LLM provider (``anthropic`` | ``openai`` | ``ollama`` | ``chat``).
-        model: Model name at the provider (provider default if omitted).
-        language: Language of the compared standard (default ``"de"``).
+        provider: LLM provider (``anthropic``, ``openai``, ``google``, ``mistral``,
+            ``groq``, ``together``, ``openrouter``, ``ollama`` or ``chat``). Providers that
+            need a base URL (``openai_compatible``, ``azure_openai``) are reached through
+            :class:`~normpare.config.Config` and :class:`~normpare.pipeline.Pipeline`.
+        model: Model name at the provider. The default is an Anthropic model, so name the
+            model for every other provider.
+        language: Language of the interpretation's free-text output (default ``"de"``).
         use_llm: If ``False``, produce only the deterministic outputs (skip interpretation).
         batch: If ``True``, submit the interpretation as one Anthropic message batch
             (~50% cheaper, asynchronous).
@@ -48,7 +52,7 @@ def compare(
             document metadata.
 
     Returns:
-        A ``RunResult`` with the paths of the produced artifacts.
+        result (normpare.pipeline.RunResult): The paths of the produced artifacts.
     """
     from .config import Config
     from .pipeline import Pipeline

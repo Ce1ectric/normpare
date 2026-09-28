@@ -7,7 +7,7 @@ deterministically and exports the prompts for the chat workflow.
 | Provider | Notes | Key |
 |---|---|---|
 | `anthropic` | default; needs the `anthropic` extra (`--extras anthropic`) | `ANTHROPIC_API_KEY` or a `.api_key` file |
-| `openai` and OpenAI-compatible (`azure`, `google`, `mistral`, `groq`, `openrouter`, DeepSeek, …) | via the standard library, no extra package | the provider's API key env var |
+| `openai` and OpenAI-compatible (`azure_openai`, `google`, `mistral`, `groq`, `together`, `openrouter`, `openai_compatible` for DeepSeek and others) | via the standard library, no extra package; `--model` required | the provider's API key env var |
 | `ollama` | local server, runs without a key | — |
 | `chat` | no API: prompts are exported for copy-paste into a chat UI; answers are injected back | — |
 
@@ -17,6 +17,17 @@ deterministically and exports the prompts for the chat workflow.
 export ANTHROPIC_API_KEY=sk-...        # or the provider's variable
 # or put the key in a file ".api_key" in the working directory
 ```
+
+The key is looked up in this order: the variable named by `llm_key_env` in a config
+file; the provider's own variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`AZURE_OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`,
+`TOGETHER_API_KEY`, `OPENROUTER_API_KEY`, `OLLAMA_API_KEY`; `openai_compatible` has none);
+the generic `LLM_API_KEY`; a file `.api_key` in the directory the command is started from;
+and, for compatibility with the predecessor project, `../Pipeline/.api_key`. The file works
+for every provider. Never commit it.
+
+The default model is an Anthropic model for every provider, so name the model with
+`--model` whenever the provider is not `anthropic`.
 
 ## Deterministic / chat workflow
 
@@ -86,14 +97,22 @@ checked against the standard, and `deutung.json` reports `evidence_ok` per entry
 quality of a model is directly measurable:
 
 ```bash
-python -c "import json;d=json.load(open('OUT/deutung.json'));x=[e for c in d['chapters'] for e in (c.get('interpretations') or [])];print(f\"evidence_ok: {100*sum(bool(e.get('evidence_ok')) for e in x)/len(x):.0f}%\")"
+python -c "import json;d=json.load(open('OUT/deutung.json'));x=[e for c in d['chapters'] for e in (c.get('interpretations') or [])];print(f\"evidence_ok: {100*sum(bool(e.get('evidence_ok')) for e in x)/max(len(x),1):.0f}%\")"
 ```
 
-In practice this separates models sharply. On a real standard revision, a frontier model
-reached **99 %** verified evidence, while a small, cheap model reached only **21 %** —
-it paraphrased instead of quoting, was *more* confident while being less grounded, and
-misread editorial rewording as substantive change. For regulatory work, prefer a strong model
-and cut cost with `--batch` (~50 % cheaper) and the answer cache instead of with a weaker model.
+In practice this separates models. On a real standard revision, a frontier model reached
+**99 %** verified evidence. A small, cheap model scored **21 %** under the guard of 0.1.x,
+which checked the answer exactly as delivered — mostly because it put labels in front of
+otherwise correct quotes; with today's quote extraction the same answers pass at about
+**80 %**. It was also *more* confident while being less grounded, and misread editorial
+rewording as substantive change. For regulatory work, prefer a strong model and cut cost
+with `--batch` (~50 % cheaper) and the answer cache instead of with a weaker model.
+
+`deepseek-v4-flash` is the exception worth knowing: over three complete standard
+revisions (1,100 to 2,400 changes each) it reached **98.3 – 99.3 %** `evidence_ok` and
+**97.6 – 98.3 %** `evidence_strict`, and every change sent to it was answered. The script
+`tools/evidence_report.py` in the repository recomputes these numbers for any finished
+run.
 
 Note that `--batch` currently uses the Anthropic message-batch API; other providers fall back
 to sequential calls.

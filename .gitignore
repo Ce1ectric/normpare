@@ -11,6 +11,10 @@ dist/
 .coverage
 htmlcov/
 
+# MkDocs-Build: wird von .github/workflows/docs.yml per gh-deploy auf gh-pages erzeugt,
+# gehört nicht auf main (einmalig: git rm -r --cached site)
+site/
+
 # Virtuelle Umgebungen
 .venv/
 venv/

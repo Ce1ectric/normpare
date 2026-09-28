@@ -13,8 +13,9 @@ theme:
 
 nav:
   - Home: index.md
-  - Concept: concept.md
   - Usage: usage.md
+  - Working with the results: results.md
+  - Concept: concept.md
   - LLM providers: providers.md
   - API Reference: reference.md
 

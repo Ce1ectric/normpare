@@ -4,21 +4,154 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
 ## [Unreleased]
+
+### Planned
+
+Agreed but not yet implemented. Rationale, sources and sequencing are recorded in the
+internal decision log.
+
+- The evidence haystack of a move also contains the text of its counterpart: most
+  interpretations that pass `evidence_ok` but not `evidence_strict` belong to moves and
+  quote the other side.
+- Detection of an appended foreign-language original at ingest, or a page-range option;
+  today such a PDF has to be cut before the run.
+- A regression fixture that covers ingest (the harness starts from frozen
+  `norm_doc.json` files and cannot see a change to PDF or DOCX reading).
+- Wrapped term headings in PDF sources (number and name on the same line, name wrapped).
+- Evidence metrics beyond quote fidelity: `evidence_ok` measures whether the quoted
+  wording occurs in the source, not whether it *supports* the interpretation. Citation
+  completeness, grounding coverage and attribution precision, with a verifier independent
+  from the interpreting model.
+- Correspondence graph supporting 1:n, n:1 and n:m relations, with per-signal scores and
+  alternative candidates retained on every edge; score margin (best over second-best
+  candidate) as the confidence measure.
+- Extended German cue inventory for modality (lexical obligation phrases, indicative
+  constructions).
+- Work / edition / manifestation identity model for units across editions.
+- Evaluation protocol measuring alignment and classification separately, with per-axis
+  inter-annotator agreement on a gold subset.
 
 ## [0.2.0] - 2026-09-28
 
+The first release meant for productive use. It has been run end to end over three complete
+standard revisions — two grid-connection rules (PDF → DOCX) and a short-circuit
+calculation standard (PDF → PDF) with 1,103 to 2,433 changes each: every change asked
+about was answered, 98.3 – 99.3 % of the quotes are verified in the source
+(`evidence_strict` 97.6 – 98.3 %). A manual check of fifteen central points, made on the
+runs just before the release, found every deterministic value change correct; the errors
+it found were a statement of the model about a table and a false alarm of the modality
+detection.
+
+### Highlights
+
+- **Every substantive change is asked about, and the run proves what came back.** Large chapters are
+  split into several requests instead of being cut at forty changes, tables reach the
+  model with up to 8,000 characters (and 40 rows) instead of 1,100 characters, and the
+  coverage counts what came back (`n_changes_total`, `n_changes`, `n_interpreted`,
+  `n_unanswered`).
+- **Four interpretation axes** replace the single change label: structural operation
+  (derived by the pipeline, never asked), semantic status, normative direction and
+  affected components — closed vocabularies, explicit abstention (`indeterminate` with a
+  reason), values outside the vocabulary discarded and counted.
+- **The interpretation is checked against what the pipeline knows.** The evidence guard
+  locates the quoted span in the answer and reports `evidence_strict`, `evidence_unique`
+  and `change_index_disputed`; four consistency checks hold the axes against the change
+  itself; the values a table interpretation claims are looked up in the table's cells.
+  Every check marks and none corrects. Failed quotes, disputed change indices,
+  disagreeing moves, named successors and failed value checks land in the review queue
+  with their reasons; the other flags are counted in `deutung.json → consistency`.
+- **A move is one event with two records.** Both are always written, a pointer is only
+  written with evidence, and the model sees the counterpart of each side.
+- **Every change knows its section** (`section_old`, `section_new`), and every value
+  change its class (`value_changed`, `operator_added`, `operator_removed`,
+  `operator_changed`).
+- **New deliverables:** the interpretations as CSV, grouped by component, a review list
+  of removals whose text is still in the new edition, and a `manifest.json` per run.
+- **More accurate extraction and alignment:** PDF lines read left to right, multi-line
+  captions, captions that reach their figures and tables, page numbers dropped, split and
+  merged paragraphs recognised, tables paired by content and across chapters, modality
+  read per sentence, parameter values in table cells.
+- **Any OpenAI-compatible provider**, DeepSeek included, and an offline answer workflow
+  for interpretation without an API.
+
+### Upgrading from 0.1.1
+
+- The prompt and schema changed several times, and the answer cache is keyed on model
+  and prompt: **a 0.1.x cache is not reused**, a new run interprets everything again.
+- All new fields are additive. A `deutung.json` or `synopse.json` written by 0.1.x stays
+  readable by the report stage; missing fields show as empty.
+- `evidence_ok` is now computed on the located quote instead of the answer as delivered.
+  Numbers from 0.1.x are lower bounds — for a model that puts labels in front of its
+  quotes, far lower.
+- Runs interpret more than before (every change, whole tables), so they take longer and
+  cost more than a 0.1.x run of the same pair.
+
 ### Added
+
+- **Parameter values in table cells are extracted.** Every table in `norm_doc.json`
+  carries `cell_values`: the values of each cell, normalised like paragraph values, plus
+  bare numbers with a decimal place (in a table the unit stands in the column heading;
+  whole numbers without a unit are not read, they would match row numbers and footnote
+  marks). `statistics.json → comparison.cell_values_unexamined` counts them per edition
+  beside
+  `kennwert_changes`, which stays the diff of paragraph text — so an empty
+  `kennwert_changes` next to a few hundred cell values can no longer be read as "no value
+  changed".
+- **What the interpretation says about a table is checked against its cells.** The
+  prompt lists every changed table with its id (in the first request of a split chapter),
+  the answer names the table in `table_ref`, and the pipeline resolves it to the
+  pipeline-owned `table_id` (falling back to an exact, unambiguous caption for older
+  answers). Every value in `value_changes`, read like a cell, is looked up in the cells —
+  the old half of an arrow in the old edition, the new half in the new one, a value
+  without an arrow in both, and both halves in the one edition a table without
+  counterpart has. The entry records `values_checked`, `values_found`, `values_ok` (also
+  `true` when nothing could be checked) and `values_elsewhere` (found only in another
+  table of the same chapter). A failed check enters the review queue as
+  `values_ok`, or as the weaker `values_in_other_table` when every missing number stands in
+  a neighbouring table. An entry that names no table of its chapter is counted as
+  unchecked in `pipeline_feedback`, never as wrong.
+- **A review list of removals.** `review_removed.json` and the readable
+  `Pruefliste_entfallen_<run>.md` list every passage reported as `removed` whose text is
+  demonstrably still in the new edition: found outside the mapped sections
+  (`relocated_outside_mapping`) or inside them (`missed_inside_mapping`) — word-trigram
+  overlap ≥ 0.7, passages from 60 characters — or a move the embedding rescue proposed and
+  the move rule rejected (`possible_move`). An unbalanced chapter mapping
+  (`unbalanced_mapping`, from `old_surplus` in `paragraph_balance`) is shown as an
+  additional reason and used for sorting, but never lists a passage by itself. The list
+  marks and never filters — the change stream is unchanged.
+- **Evidence metrics beside `evidence_ok`, and the quote located first.** The guard no
+  longer checks the answer as delivered: it locates the quoted span (`evidence_span`, with
+  the method in `evidence_extraction`), so a label in front of a correct quote no longer
+  fails it. Beside `evidence_ok`, whose rule is unchanged, it reports `evidence_strict`
+  (the quote found in full, fragments between ellipsis marks checked separately),
+  `evidence_match_chars` and `evidence_fragments`.
+- **Modality detection covers more of the German deontic repertoire.** The modal
+  infinitive (`ist … zu prüfen`, `hat … nachzuweisen`) counts as a duty; negation is
+  split by type and polarity (a negated permission is a prohibition, a negated necessity
+  drops a duty); permission frames (`ist es zulässig, … heranzuziehen`) are excluded.
+  `tools/modality_audit.py` counts the constructions sentence by sentence.
+- Analysis tools, all offline and read-only over finished runs:
+  `tools/table_pairing_report.py` (why unlabelled tables do not pair),
+  `tools/mapping_balance.py` (how much of the removal stream comes from unbalanced chapter
+  mappings), `tools/removed_relocation.py` (which stage produced a removal),
+  `tools/review_removed_report.py`, `tools/candidate_simulation.py`.
+- `tests/test_version.py`: the version in `pyproject.toml`, `normpare.__version__` and
+  the CHANGELOG section must agree.
+- Documentation: a new page *Working with the results* (reading order, where a change
+  stands, the review queue, what to check by hand, input hygiene); README, Concept,
+  Usage and LLM providers brought up to this release.
 
 - **Every change knows the section it really stands in.** Each change record in
   `synopse.json` carries `section_old` and `section_new`, read from the paragraph-to-section
   assignment of `norm_doc.json` rather than from the shape of the paragraph id, and
-  `statistics.json → kennwert_changes` carries `section` beside the unchanged `chapter` and
-  `mapping_id`. Wherever a single change appears with a chapter number — both Word
+  `statistics.json → comparison → kennwert_changes` carries `section` beside the unchanged
+  `chapter` and `mapping_id`. Wherever a single change appears with a chapter number — both Word
   synopses, `Aenderungen_<run>.csv` (two columns appended at the end), the component view,
   the PowerPoint slides and the parameter-value table of the annotated HTML — the actual
   section is shown when it differs from the block head, both sides when they differ from
-  each other (`11.2.5 → 11.2.6.7`). Measured over the three reference runs, 1008 of 2474
+  each other (`11.2.5 → 11.2.6.7`). Measured over three earlier reference runs, 1008 of 2474
   changes at 4110, 902 of 2321 at 4120 and 307 of 1899 at 60909 stood in a subsection of
   the head they were shown under.
 - **Every value change carries its class.** Each entry of `kennwerte.changed` and of
@@ -37,156 +170,6 @@ All notable changes to this project are documented here. The format is based on
   the change text is a fragment, and the voice of the free text). No signal decides on its
   own, the assignment rule is in the module docstring, and the records that fit no rule are
   counted as such. Read-only, offline, several `--dir`, writes only below `--out`.
-
-### Changed
-
-- **A disputed change record no longer counts as a disputed interpretation.**
-  `axis_b_contradicts_a` still marks every `equivalent` on a change without a counterpart,
-  but where the chapter reports that same change in its `pipeline_feedback` the record is
-  counted in `n_axis_b_reported_as_artefact` instead of `n_axis_b_contradicts_a`. The flag
-  is not removed and no value is corrected; both numbers reach `pipeline_feedback`, at zero
-  as well. Measured over the three reference runs the first number falls from 116 / 72 / 63
-  to 47 / 26 / 37.
-- **The schema says when `equivalent` is admissible without a counterpart.** The field
-  description of `semantic_status` now ties the value to the report: it is admissible only
-  where the change record is no real change at all, and then the record has to be named in
-  `pipeline_feedback`. +286 characters per request (+1.95 % / +2.04 % / +2.54 %); the answer
-  cache is invalidated for every chapter.
-
-### Fixed
-
-- **The replay driver replays the run instead of continuing it.** `tools/replay.py`
-  recomputes the deterministic stages of a finished run over its frozen `norm_doc.json`
-  — it is the instrument every change has been measured with since the first work
-  package. It started from the wrong state: the mapping stage materializes the titles of
-  absorbed old sections as paragraphs and writes them back into `alt/norm_doc.json`, so a
-  finished run carries them. Recomputing over them let those paragraphs take part in the
-  similarity computation a second time; a different set of sections was absorbed, new
-  synthetic paragraphs appeared, and the result was a run continued by one pass rather
-  than reproduced.
-  - The copy is now put back to the state the replay claims to start from: every
-    paragraph flagged `synthetic_title` is removed from both documents before the stages
-    run (`strip_synthetic_paragraphs`). They carry nothing but the section title, and the
-    mapping stage creates them again — verified identical on thirteen reference runs. A
-    document without them keeps its bytes.
-  - Replaying a replay is now byte-identical over all eight compared artifacts, measured
-    on five reference runs. The `moved` list matches the original element for element
-    wherever the reference was produced by the current code: 85, 115 and 29 moves — the
-    last one had been reported as 36. The chapter mapping matches everywhere (220 / 211 /
-    108 / 272 / 108 records).
-  - `--enrich` is fixed along with it. The enrichment stage used to run over the
-    synthetic paragraphs and fold them into the per-section aggregates, which a fresh run
-    never does, because enrichment precedes the mapping. A replay with `--enrich` is now
-    byte-identical to one without.
-  - Numbers quoted from replays made before this fix are on a different fixed point
-    wherever the absorbed set did not converge — the 439 moves in the entry below are one
-    such number; today the same run replays to 467, and its own frozen result is 299,
-    because that run predates the move rules of the current code. Every 4110 replay the
-    project ever made is unaffected.
-
-- **Both sides of a move are written down, also into and out of a chapter that has no
-  counterpart.** A chapter mapping record of type `new` or `removed` got no `para_links`
-  at all, so its paragraphs entered the document-wide move pass through a second route
-  without a link index — and whichever side of a move sat in such a chapter lost its
-  change record. One event was then counted twice: the old side said "moved to X" while
-  the new side reported X as an addition (21 such dead pointers over five finished runs,
-  every single one of them into a chapter of type `new`), or the mirror of it, or — where
-  both sides were unmapped — the move was written in `mapping.json` and in no change
-  record at all.
-  - Records without a counterpart now carry `para_links`, one link per paragraph. The
-    candidate order of the move pass is unchanged (mapped chapters first, in record
-    order), and so is the pairing: the `moved` list is identical element for element over
-    five replays, including 439 moves on a DOCX-to-DOCX 4110 run.
-  - A pointer is evidence or it is not written: without a target record a move names the
-    target *chapter* (`moved_to_chapter`), the treatment a block continuation gets.
-  - The synopsis reports a moved paragraph of such a chapter as the move it is instead of
-    a second time as an addition or a deletion. The number of change records is unchanged;
-    their `kind` is not.
-  - `move_pairs` additionally reports `orphans` — a `moved_in` whose source nobody calls
-    `moved_away` — and `pipeline_feedback` carries both guards, `move_pointer` and
-    `move_pointer_orphan`. Both must read zero.
-  - Measured on two corpora: dead pointers 12 → 0 and 3 → 0, orphaned `moved_in` 4 → 0,
-    moves without any record 8 → 0 and 6 → 0.
-
-- **The coverage counts the interpretations that came back, not the changes that were
-  asked about.** `coverage.n_interpreted` was the sum of the change selections the
-  answering prompts were built from. As long as a model answers about every change it is
-  shown the two are the same number; in the 60909 run of 2026-08-22 they were not, and
-  the run reported "1897 of 1897 (100.0 %)" over 77 changes that carry no interpretation
-  at all — no duplicate change index, no collision, simply no answer. Those 77 appear in
-  no component view and in no CSV row.
-  - `n_interpreted` is now counted **after** the merge, over the `change_index` values
-    really present in the chapter answer. An index outside the chapter's range does not
-    count: it points at no change, so no change gains an interpretation from it.
-  - New in `coverage`: `n_unanswered` — changes that lay in front of a model and came
-    back without an interpretation — and `n_changes_total`, every change of the
-    comparison including the chapters the scope leaves out (their changes are all
-    semantically equal). `n_changes` keeps its meaning: what was shown to a prompt.
-  - The console names all three (`Änderungen: 1899, vorgelegt 1897, gedeutet 1820
-    (95,8 %)`) and always writes the `ohne Antwort:` line, with the affected chapters and
-    their counts when it is not zero. The same numbers reach `pipeline_feedback` and the
-    head note of both deliverables; the note is written when something shown came back
-    unanswered, not merely because a purely cosmetic chapter was skipped on purpose.
-  - A `deutung.json` written before this change stays readable and reports what it could
-    report then.
-
-### Changed
-
-- **A move shows its counterpart in the request.** The change record of a move carries
-  only its own half — a `moved_away` has the old text, a `moved_in` the new one — and of
-  the other half the request held nothing but a pointer. So the axis B rule ("unchanged
-  moved text is `equivalent`, text reworded on the way takes the value of the rewording")
-  was not decidable at all: the model could not see whether the text had been reworded.
-  The counterpart is now resolved over `moved_to`/`moved_from` and shown under the label
-  of its side — the new text for a `moved_away`, the old one for a `moved_in` — clipped at
-  the same 900 characters as every other text in the block. Where the pointer names only
-  the chapter (a block continuation) or a paragraph the document does not have, nothing is
-  added: no placeholder and no guess. Measured over the three runs of 2026-09-01, all 140
-  / 160 / 52 pointers resolve, and the counterpart costs 31 653 / 38 123 / 10 977
-  characters, on average 163 / 205 / 97 per request.
-
-- **The field description of `normative_direction` says what axis C means for a move.**
-  Axis B was settled by the rule of the previous entry — disagreement between the two
-  records of one move fell from 66 % / 88 % / 54 % to 1.4 % / 1.3 % / 3.9 % — and axis C
-  became the whole remainder: 24 / 33 / 7 disagreeing pairs, and the entire growth of the
-  review queue from 17 / 25 / 13 to 63 / 104 / 31 entries. The two sides almost never
-  argue about the direction; they argue about whether the text is normative at all
-  (`unchanged` against `not_applicable` in 23 / 22 / 7 of the cases). The rule: a move
-  changes nothing about the duty, so the axis describes what the *relocation* means for
-  whoever is bound, and that is nothing — `unchanged` where the moved text carries a duty,
-  `not_applicable` where it does not, the same value on **both** sides, and
-  `tightened`/`relaxed` only where the text was changed on the way and the change itself
-  shifts the duty. **No new value and no new axis field**; the rule costs 359 characters
-  of schema. It is followable only because of the counterpart above: "the same value on
-  both sides" presupposes that both sides see the same thing.
-
-- **The field description of `semantic_status` says what axis B means for a change
-  without a counterpart.** The axis says what happens to the *statement*, and a purely
-  added or purely dropped passage has no previous statement that `equivalent`,
-  `clarified`, `extended` or `narrowed` could be read against. The rule now stands where
-  the model reads it: for such a change the axis describes what happens to the **body of
-  statements** of the standard — newly added text is `extended`, text dropped without
-  replacement is `narrowed`, and a recognisable successor or predecessor elsewhere makes
-  it `replaced`. Measured over the three runs of 2026-08-22, `semantic_status` was the
-  only field that went missing, in 16.2 % / 14.2 % / 8.2 % of the interpretations and
-  concentrated on `new` (25.5 %) and `removed` (21.1 %). **No new value on the axis**:
-  axis A already carries `added`/`removed`, and a second place for the same statement is
-  the category error the taxonomy removed. The rule costs 278 characters of schema, 2.4 %
-  to 3.5 % of a median chapter request.
-
-- **The field description of `semantic_status` says what axis B means for a move.** A
-  move is one event with two change records, and until now the schema said nothing about
-  it: seen from the old place the model reported `replaced`, seen from the new one
-  `equivalent`, and over the three runs of 2026-08-27 the two sides disagreed in 66 % /
-  88 % / 54 % of the pairs the pipeline can join. The rule (Christian, 2026-08-27): axis B
-  describes the **text**, the place is structural. Unchanged moved text is `equivalent`,
-  text reworded on the way takes the value that describes the rewording, and `replaced`
-  stays with a change whose counterpart is not connected by a move record. **No new value
-  and no new axis field**; the rule costs 335 characters of schema, 2.8 % to 4.1 % of a
-  median chapter request. It changes the prompt and with it the cache key, so it takes
-  effect at the next interpretation run.
-
-### Added
 
 - **Four consistency checks between the interpretation and what the pipeline knows by
   itself** (`check_consistency`, written into `deutung.json` and reported in
@@ -435,7 +418,92 @@ All notable changes to this project are documented here. The format is based on
   written by the stage, all 1552 are checkable; 142 of the 165 pass the evidence guard,
   23 enter the review queue they never reached before.
 
+- Every run writes a `manifest.json`: schema version, normpare version, timestamp, both
+  input files with their SHA-256 and every effective parameter. Without it an output
+  directory cannot say what produced it.
+- The interpretation stage takes a provider (`DeutungProvider`). `LiveProvider` is the
+  existing path; `FixtureProvider` serves frozen answers from a JSON file, which makes the
+  stage testable without a network call.
+- A fifth evidence field, `evidence_unique`: the quote occurs verbatim in the addressed
+  change record and in no other record of the same chapter. It is reported, not enforced.
+- A synthetic corpus (`tests/fixtures/synthetic/`) exercising renumbering, moves, merges,
+  additions, removals and four evidence cases. It contains no text from any real standard,
+  so it ships with the package and runs in CI; `tools/build_synthetic.py` turns it into the
+  DOCX pair the pipeline reads.
+
+- `tools/removed_audit.py` checks every reported removal against the full text of the new
+  edition and classifies it: a genuine removal, a false positive in the mapped counterpart
+  chapter (paragraph alignment), or a move into another chapter (chapter alignment). For
+  false positives it also names the structural constellation behind them.
+
 ### Changed
+
+- **A disputed change record no longer counts as a disputed interpretation.**
+  `axis_b_contradicts_a` still marks every `equivalent` on a change without a counterpart,
+  but where the chapter reports that same change in its `pipeline_feedback` the record is
+  counted in `n_axis_b_reported_as_artefact` instead of `n_axis_b_contradicts_a`. The flag
+  is not removed and no value is corrected; both numbers reach `pipeline_feedback`, at zero
+  as well. Measured over the three reference runs the first number falls from 116 / 72 / 63
+  to 47 / 26 / 37.
+- **The schema says when `equivalent` is admissible without a counterpart.** The field
+  description of `semantic_status` now ties the value to the report: it is admissible only
+  where the change record is no real change at all, and then the record has to be named in
+  `pipeline_feedback`. +286 characters per request (+1.95 % / +2.04 % / +2.54 %); the answer
+  cache is invalidated for every chapter.
+
+- **A move shows its counterpart in the request.** The change record of a move carries
+  only its own half — a `moved_away` has the old text, a `moved_in` the new one — and of
+  the other half the request held nothing but a pointer. So the axis B rule ("unchanged
+  moved text is `equivalent`, text reworded on the way takes the value of the rewording")
+  was not decidable at all: the model could not see whether the text had been reworded.
+  The counterpart is now resolved over `moved_to`/`moved_from` and shown under the label
+  of its side — the new text for a `moved_away`, the old one for a `moved_in` — clipped at
+  the same 900 characters as every other text in the block. Where the pointer names only
+  the chapter (a block continuation) or a paragraph the document does not have, nothing is
+  added: no placeholder and no guess. Measured over the three runs of 2026-09-01, all 140
+  / 160 / 52 pointers resolve, and the counterpart costs 31 653 / 38 123 / 10 977
+  characters, on average 163 / 205 / 97 per request.
+
+- **The field description of `normative_direction` says what axis C means for a move.**
+  Axis B was settled by the rule of the previous entry — disagreement between the two
+  records of one move fell from 66 % / 88 % / 54 % to 1.4 % / 1.3 % / 3.9 % — and axis C
+  became the whole remainder: 24 / 33 / 7 disagreeing pairs, and the entire growth of the
+  review queue from 17 / 25 / 13 to 63 / 104 / 31 entries. The two sides almost never
+  argue about the direction; they argue about whether the text is normative at all
+  (`unchanged` against `not_applicable` in 23 / 22 / 7 of the cases). The rule: a move
+  changes nothing about the duty, so the axis describes what the *relocation* means for
+  whoever is bound, and that is nothing — `unchanged` where the moved text carries a duty,
+  `not_applicable` where it does not, the same value on **both** sides, and
+  `tightened`/`relaxed` only where the text was changed on the way and the change itself
+  shifts the duty. **No new value and no new axis field**; the rule costs 359 characters
+  of schema. It is followable only because of the counterpart above: "the same value on
+  both sides" presupposes that both sides see the same thing.
+
+- **The field description of `semantic_status` says what axis B means for a change
+  without a counterpart.** The axis says what happens to the *statement*, and a purely
+  added or purely dropped passage has no previous statement that `equivalent`,
+  `clarified`, `extended` or `narrowed` could be read against. The rule now stands where
+  the model reads it: for such a change the axis describes what happens to the **body of
+  statements** of the standard — newly added text is `extended`, text dropped without
+  replacement is `narrowed`, and a recognisable successor or predecessor elsewhere makes
+  it `replaced`. Measured over the three runs of 2026-08-22, `semantic_status` was the
+  only field that went missing, in 16.2 % / 14.2 % / 8.2 % of the interpretations and
+  concentrated on `new` (25.5 %) and `removed` (21.1 %). **No new value on the axis**:
+  axis A already carries `added`/`removed`, and a second place for the same statement is
+  the category error the taxonomy removed. The rule costs 278 characters of schema, 2.4 %
+  to 3.5 % of a median chapter request.
+
+- **The field description of `semantic_status` says what axis B means for a move.** A
+  move is one event with two change records, and until now the schema said nothing about
+  it: seen from the old place the model reported `replaced`, seen from the new one
+  `equivalent`, and over the three runs of 2026-08-27 the two sides disagreed in 66 % /
+  88 % / 54 % of the pairs the pipeline can join. The rule (Christian, 2026-08-27): axis B
+  describes the **text**, the place is structural. Unchanged moved text is `equivalent`,
+  text reworded on the way takes the value that describes the rewording, and `replaced`
+  stays with a change whose counterpart is not connected by a move record. **No new value
+  and no new axis field**; the rule costs 335 characters of schema, 2.8 % to 4.1 % of a
+  median chapter request. It changes the prompt and with it the cache key, so it takes
+  effect at the next interpretation run.
 
 - **The modality of a change is read off the sentences that changed, not off the whole
   paragraph.** The paragraph maximum answered a different question than the change asks: a
@@ -590,22 +658,102 @@ All notable changes to this project are documented here. The format is based on
   between `chapters.json` and `deutung.json` in the July run) does not exist in the replay
   and was dropped with it; the `known_deviations` mechanism itself is unchanged.
 
-### Added
-
-- Every run writes a `manifest.json`: schema version, normpare version, timestamp, both
-  input files with their SHA-256 and every effective parameter. Without it an output
-  directory cannot say what produced it.
-- The interpretation stage takes a provider (`DeutungProvider`). `LiveProvider` is the
-  existing path; `FixtureProvider` serves frozen answers from a JSON file, which makes the
-  stage testable without a network call.
-- A fifth evidence field, `evidence_unique`: the quote occurs verbatim in the addressed
-  change record and in no other record of the same chapter. It is reported, not enforced.
-- A synthetic corpus (`tests/fixtures/synthetic/`) exercising renumbering, moves, merges,
-  additions, removals and four evidence cases. It contains no text from any real standard,
-  so it ships with the package and runs in CI; `tools/build_synthetic.py` turns it into the
-  DOCX pair the pipeline reads.
-
 ### Fixed
+
+- **A caption found in a later section reaches its figure or table.** PDF assets were
+  collected per page and written out with the first section touching the page; a caption
+  found afterwards was written into a copy that had already been emitted and never reached
+  the output. Assets are now claimed during the section loop and copied after it. Over the
+  four PDF sources 22 / 16 / 6 / 2 captions (215 / 157 / 49 / 27 words) come back; no word
+  is lost and no asset changes anything but its caption.
+- **Captions and sub-headings that wrap over several layout lines are read whole.** A
+  PDF caption is joined over up to three lines (`MAX_CAPTION_LINES`), stopping at a
+  sentence end, a large gap, a bullet or the next caption; wrapped sub-headings use the
+  same rule and stop at the next sub-heading. A caption number followed directly by its
+  description, without a separator, is recognised (`normpare.text.captions`, shared with
+  the table diff), including sub-figure numbers such as `Bild 3c`.
+- **Page numbers no longer become paragraphs.** A line holding nothing but a number is
+  now also dropped at the top or bottom edge of a page when no paragraph is open; between
+  paragraphs inside a page (legend and formula content) it stays. Together with the two entries
+  above the number of changes falls by 1 to 2 % on three corpora, none of it
+  unexplained.
+- **A thousands separator written as a space is read.** `1 000 ms` was read as `000 ms`,
+  a silent zero instead of a missing value.
+
+- **The replay driver replays the run instead of continuing it.** `tools/replay.py`
+  recomputes the deterministic stages of a finished run over its frozen `norm_doc.json`
+  — it is the instrument every change has been measured with since the first work
+  package. It started from the wrong state: the mapping stage materializes the titles of
+  absorbed old sections as paragraphs and writes them back into `alt/norm_doc.json`, so a
+  finished run carries them. Recomputing over them let those paragraphs take part in the
+  similarity computation a second time; a different set of sections was absorbed, new
+  synthetic paragraphs appeared, and the result was a run continued by one pass rather
+  than reproduced.
+  - The copy is now put back to the state the replay claims to start from: every
+    paragraph flagged `synthetic_title` is removed from both documents before the stages
+    run (`strip_synthetic_paragraphs`). They carry nothing but the section title, and the
+    mapping stage creates them again — verified identical on thirteen reference runs. A
+    document without them keeps its bytes.
+  - Replaying a replay is now byte-identical over all eight compared artifacts, measured
+    on five reference runs. The `moved` list matches the original element for element
+    wherever the reference was produced by the current code: 85, 115 and 29 moves — the
+    last one had been reported as 36. The chapter mapping matches everywhere (220 / 211 /
+    108 / 272 / 108 records).
+  - `--enrich` is fixed along with it. The enrichment stage used to run over the
+    synthetic paragraphs and fold them into the per-section aggregates, which a fresh run
+    never does, because enrichment precedes the mapping. A replay with `--enrich` is now
+    byte-identical to one without.
+  - Numbers quoted from replays made before this fix are on a different fixed point
+    wherever the absorbed set did not converge — the 439 moves in the entry below are one
+    such number; today the same run replays to 467, and its own frozen result is 299,
+    because that run predates the move rules of the current code. Every 4110 replay the
+    project ever made is unaffected.
+
+- **Both sides of a move are written down, also into and out of a chapter that has no
+  counterpart.** A chapter mapping record of type `new` or `removed` got no `para_links`
+  at all, so its paragraphs entered the document-wide move pass through a second route
+  without a link index — and whichever side of a move sat in such a chapter lost its
+  change record. One event was then counted twice: the old side said "moved to X" while
+  the new side reported X as an addition (21 such dead pointers over five finished runs,
+  every single one of them into a chapter of type `new`), or the mirror of it, or — where
+  both sides were unmapped — the move was written in `mapping.json` and in no change
+  record at all.
+  - Records without a counterpart now carry `para_links`, one link per paragraph. The
+    candidate order of the move pass is unchanged (mapped chapters first, in record
+    order), and so is the pairing: the `moved` list is identical element for element over
+    five replays, including 439 moves on a DOCX-to-DOCX 4110 run.
+  - A pointer is evidence or it is not written: without a target record a move names the
+    target *chapter* (`moved_to_chapter`), the treatment a block continuation gets.
+  - The synopsis reports a moved paragraph of such a chapter as the move it is instead of
+    a second time as an addition or a deletion. The number of change records is unchanged;
+    their `kind` is not.
+  - `move_pairs` additionally reports `orphans` — a `moved_in` whose source nobody calls
+    `moved_away` — and `pipeline_feedback` carries both guards, `move_pointer` and
+    `move_pointer_orphan`. Both must read zero.
+  - Measured on two corpora: dead pointers 12 → 0 and 3 → 0, orphaned `moved_in` 4 → 0,
+    moves without any record 8 → 0 and 6 → 0.
+
+- **The coverage counts the interpretations that came back, not the changes that were
+  asked about.** `coverage.n_interpreted` was the sum of the change selections the
+  answering prompts were built from. As long as a model answers about every change it is
+  shown the two are the same number; in the 60909 run of 2026-08-22 they were not, and
+  the run reported "1897 of 1897 (100.0 %)" over 77 changes that carry no interpretation
+  at all — no duplicate change index, no collision, simply no answer. Those 77 appear in
+  no component view and in no CSV row.
+  - `n_interpreted` is now counted **after** the merge, over the `change_index` values
+    really present in the chapter answer. An index outside the chapter's range does not
+    count: it points at no change, so no change gains an interpretation from it.
+  - New in `coverage`: `n_unanswered` — changes that lay in front of a model and came
+    back without an interpretation — and `n_changes_total`, every change of the
+    comparison including the chapters the scope leaves out (their changes are all
+    semantically equal). `n_changes` keeps its meaning: what was shown to a prompt.
+  - The console names all three (`Änderungen: 1899, vorgelegt 1897, gedeutet 1820
+    (95,8 %)`) and always writes the `ohne Antwort:` line, with the affected chapters and
+    their counts when it is not zero. The same numbers reach `pipeline_feedback` and the
+    head note of both deliverables; the note is written when something shown came back
+    unanswered, not merely because a purely cosmetic chapter was skipped on purpose.
+  - A `deutung.json` written before this change stays readable and reports what it could
+    report then.
 
 - A PDF line is now read left to right instead of in drawing order. PyMuPDF returns the
   spans of a line in content-stream order, and in DIN EN 60909-0:2016 a subscript is drawn
@@ -628,53 +776,33 @@ All notable changes to this project are documented here. The format is based on
 - `manifest.json` no longer fails on a run without source files (a replay starts from the
   frozen `norm_doc.json`); a path that is not a readable file is recorded as absent.
 
-### Added
+### Known limitations
 
-- `tools/removed_audit.py` checks every reported removal against the full text of the new
-  edition and classifies it: a genuine removal, a false positive in the mapped counterpart
-  chapter (paragraph alignment), or a move into another chapter (chapter alignment). For
-  false positives it also names the structural constellation behind them.
-
-### Changed
-
-- `evidence_ok` is being reframed. A literature review (2026-08) established that the
-  current check measures **quote fidelity** — whether the cited wording actually occurs in
-  the source paragraph — and not whether the cited span *supports* the interpretation, nor
-  whether the interpretation stays within what the span licenses. Three separate metrics
-  will replace the single figure: citation completeness, grounding coverage and attribution
-  precision. The reported "99.88 % evidence" refers to quote fidelity and will be labelled
-  as such.
-
-### Planned
-
-Agreed but not yet implemented. Rationale, sources and sequencing are recorded in the
-internal decision log (`notizen/Entscheidungen_Literaturreview.md`, decisions ENT-01…17)
-and the change strategy (`notizen/Aenderungsstrategie.md`).
-
-- Four-axis change taxonomy replacing the single change label: structural operation,
-  semantic status, normative direction, affected normative component.
-- An explicit `undetermined` interpretation status with reason codes, alongside the
-  existing review queue.
-- Correspondence graph supporting 1:n, n:1 and n:m relations, with per-signal scores and
-  alternative candidates retained on every edge.
-- Score margin (best over second-best candidate) as the confidence measure, replacing raw
-  similarity.
-- Support and no-overflow verification of interpretations against cited spans, using a
-  verifier independent from the interpreting model.
-- Quote-first span resolution with recorded matching method and edit distance.
-- Extended German cue inventory covering modal infinitives, lexical obligation phrases and
-  indicative constructions, which the current modality detection does not capture.
-- Work / edition / manifestation identity model for units across editions.
-- Evaluation protocol measuring alignment and classification separately, with per-axis
-  inter-annotator agreement on a gold subset.
+- The value check of a table interpretation proves that a number is in the table, not
+  that it sits in the row or column the text assigns it to. Read the table before relying
+  on an interpretation of it.
+- A detected modality shift (`informativ → muss`) can be a false alarm, and a duty stated
+  without a modal verb can be missed.
+- `normative_direction` is the model's reading. `axis_c_contradicts_modality` marks only
+  a change with a modal verb called `not_applicable`; a direction reported for
+  informative text is counted, not marked, and other values can still be wrong.
+- A table reaches the model with at most 40 rows; the cut is noted in the prompt, but
+  `Tabellen gekürzt` on the console counts only the character limit.
+- `compare()` has no `base_url` argument; `openai_compatible` and `azure_openai` are
+  reached through `Config` and `Pipeline` (or the CLI).
+- `contradiction_flag` is set often, and mostly on extraction artefacts the same chapter
+  reports in `pipeline_feedback` — it is the largest reason in the review queue.
+- A PDF delivered with an appended original in another language is read as one document;
+  cut it to the national pages before the run.
+- Figure counts of a PDF and a DOCX are not comparable (placed image objects against
+  embedded drawings).
 
 ## [0.1.1] - 2026-07-09
 
 First usable release. `normpare` compares two editions of a technical standard and produces
 the change set deterministically, with an optional AI-interpreted synopsis on top.
 
-!!! note
-    0.1.0 was withdrawn immediately after upload and must not be used.
+> **Note:** 0.1.0 was withdrawn immediately after upload and must not be used.
 
 ### Added
 
@@ -710,4 +838,6 @@ the change set deterministically, with an optional AI-interpreted synopsis on to
   fixed so repeated runs produce byte-identical mapping, keywords and statistics, and a
   content-identical synopsis.
 
+[Unreleased]: https://github.com/Ce1ectric/normpare/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Ce1ectric/normpare/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Ce1ectric/normpare/releases/tag/v0.1.1
