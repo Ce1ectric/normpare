@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "normpare"
-version = "0.2.0.dev0"
+version = "0.2.0"
 description = "Compare two editions of a technical standard: changes, per-chapter summaries and a synopsis — deterministic, plus optional AI interpretation."
 authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
 license = "MIT"
