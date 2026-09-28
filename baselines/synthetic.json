@@ -68,5 +68,17 @@
    "tables_fragment": 0,
    "tables_real": 0
   }
+ },
+ "known_deviations": {
+  "synopse.json": {
+   "expected_sha256": "310546174bdd8ffa2288820acca6961e9a52c6a1526c7a0e484f4ffa36aad83d",
+   "grund": "AP-41, rein additiv: section_old/section_new an jedem Änderungssatz. Kein bestehender Wert, keine Schlüsselreihenfolge und keine Listenlänge ändert sich.",
+   "belegt_durch": "runs/AP-41_2026-09-28/artefakt_abweichung_synthetisch.txt"
+  },
+  "chapters.json": {
+   "expected_sha256": "ec87d10ad9926cb3ca3950e459d63bcc57da0f4289e4ba56e578480d65e224fb",
+   "grund": "AP-41, rein additiv: section_old/section_new an jedem Änderungssatz. Kein bestehender Wert, keine Schlüsselreihenfolge und keine Listenlänge ändert sich.",
+   "belegt_durch": "runs/AP-41_2026-09-28/artefakt_abweichung_synthetisch.txt"
+  }
  }
 }

@@ -196,6 +196,13 @@ A chapter with more changes than fit into one request is split into numbered par
 
 - `synopse.json`, `chapters.json`, `statistics.json`, `keywords.json`, `mapping.json`,
   `review_removed.json`, and `deutung.json` when an interpretation ran.
+- Every change record in `synopse.json` carries **`section_old`** and **`section_new`**:
+  the section its first paragraph sits in on each side, `None` where that side is empty.
+  A chapter mapping is named after its head, and about four out of ten changes stand in a
+  subsection of it, so the block title and the place to look up are not the same thing.
+  The sections come from the paragraph-to-section assignment of `norm_doc.json`, not from
+  the shape of the paragraph id, and the reports show them wherever a single change
+  appears with a chapter number.
 - `manifest.json` — inputs with their SHA-256, the stages that ran, and every parameter of
   the run.
 - `pipeline_feedback.md` — what the interpretation noticed: axis violations, truncated
@@ -219,6 +226,12 @@ went wrong, and the console and `pipeline_feedback.md` point at it by name.
 - **Parameter values are read from paragraph text only.** A limit value that lives in a
   table cell does not appear in `statistics.json → kennwert_changes`. With an AI run, table
   values are reported separately under `chapters[].tables[].value_changes` in `deutung.json`.
+- **A value change is not always a changed number.** Every entry of `kennwerte.changed`
+  carries **`value_class`**: `value_changed` when the normalized quantity moved,
+  `operator_added` / `operator_removed` / `operator_changed` when only the operator in
+  front of it did. The class is a label, not a verdict — `± 5 % → 5 %` drops an operator
+  and still narrows the tolerance to one direction — so nothing is filtered by it; the
+  reports only put the changed numbers first.
 - **The `figures` count is not a count of figures.** For a PDF it counts placed image
   objects, so one drawing assembled from many pieces counts many times; for a DOCX it counts
   embedded drawings. The two are not comparable with each other. Figures are extracted as

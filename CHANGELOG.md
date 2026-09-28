@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Every change knows the section it really stands in.** Each change record in
+  `synopse.json` carries `section_old` and `section_new`, read from the paragraph-to-section
+  assignment of `norm_doc.json` rather than from the shape of the paragraph id, and
+  `statistics.json → kennwert_changes` carries `section` beside the unchanged `chapter` and
+  `mapping_id`. Wherever a single change appears with a chapter number — both Word
+  synopses, `Aenderungen_<run>.csv` (two columns appended at the end), the component view,
+  the PowerPoint slides and the parameter-value table of the annotated HTML — the actual
+  section is shown when it differs from the block head, both sides when they differ from
+  each other (`11.2.5 → 11.2.6.7`). Measured over the three reference runs, 1008 of 2474
+  changes at 4110, 902 of 2321 at 4120 and 307 of 1899 at 60909 stood in a subsection of
+  the head they were shown under.
+- **Every value change carries its class.** Each entry of `kennwerte.changed` and of
+  `kennwert_changes` carries `value_class`: `value_changed`, `operator_added`,
+  `operator_removed` or `operator_changed`, decided on `(base_value, base_unit,
+  base_value2)` of both sides and the `op` field. The Word synopsis and the deck put the
+  changed numbers first and count them in the headline; the three operator classes follow
+  in a named list below. Nothing is dropped — a removed operator can be a real narrowing.
+  At 4110 the split is 4 / 3 / 2 / 0, at 4120 5 / 2 / 0 / 1.
+
 - **`equivalent` without a counterpart is classified before it is judged.**
   `tools/equivalent_without_counterpart.py` assigns every such interpretation of a
   finished run to one of four groups — a relocation with a recognisable counterpart, a
